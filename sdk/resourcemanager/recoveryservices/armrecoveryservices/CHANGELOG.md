@@ -1,5 +1,74 @@
 # Release History
 
+## 1.5.0 (2023-09-22)
+### Features Added
+
+- New enum type `MultiUserAuthorization` with values `MultiUserAuthorizationDisabled`, `MultiUserAuthorizationEnabled`, `MultiUserAuthorizationInvalid`
+- New enum type `SecureScoreLevel` with values `SecureScoreLevelAdequate`, `SecureScoreLevelMaximum`, `SecureScoreLevelMinimum`, `SecureScoreLevelNone`
+- New enum type `SoftDeleteState` with values `SoftDeleteStateAlwaysON`, `SoftDeleteStateDisabled`, `SoftDeleteStateEnabled`, `SoftDeleteStateInvalid`
+- New struct `SoftDeleteSettings`
+- New field `MultiUserAuthorization`, `SoftDeleteSettings` in struct `SecuritySettings`
+- New field `SecureScore` in struct `VaultProperties`
+
+
+## 1.4.0 (2023-06-23)
+### Features Added
+
+- New enum type `CrossSubscriptionRestoreState` with values `CrossSubscriptionRestoreStateDisabled`, `CrossSubscriptionRestoreStateEnabled`, `CrossSubscriptionRestoreStatePermanentlyDisabled`
+- New struct `CrossSubscriptionRestoreSettings`
+- New struct `RestoreSettings`
+- New field `RestoreSettings` in struct `VaultProperties`
+
+
+## 1.3.1 (2023-04-14)
+### Bug Fixes
+
+- Fix serialization bug of empty value of `any` type.
+
+
+## 1.3.0 (2023-03-31)
+### Features Added
+
+- New struct `ClientFactory` which is a client factory used to create any client in this module
+- New enum type `ImmutabilityState` with values `ImmutabilityStateDisabled`, `ImmutabilityStateLocked`, `ImmutabilityStateUnlocked`
+- New enum type `PublicNetworkAccess` with values `PublicNetworkAccessDisabled`, `PublicNetworkAccessEnabled`
+- New enum type `VaultSubResourceType` with values `VaultSubResourceTypeAzureBackup`, `VaultSubResourceTypeAzureBackupSecondary`, `VaultSubResourceTypeAzureSiteRecovery`
+- New function `*Client.Capabilities(context.Context, string, ResourceCapabilities, *ClientCapabilitiesOptions) (ClientCapabilitiesResponse, error)`
+- New struct `CapabilitiesProperties`
+- New struct `CapabilitiesResponse`
+- New struct `CapabilitiesResponseProperties`
+- New struct `DNSZone`
+- New struct `DNSZoneResponse`
+- New struct `ImmutabilitySettings`
+- New struct `ResourceCapabilities`
+- New struct `ResourceCapabilitiesBase`
+- New struct `SecuritySettings`
+- New field `GroupIDs` in struct `PrivateEndpointConnection`
+- New field `PublicNetworkAccess` in struct `VaultProperties`
+- New field `SecuritySettings` in struct `VaultProperties`
+
+
+## 1.2.0 (2023-02-24)
+### Features Added
+
+- New type alias `ImmutabilityState` with values `ImmutabilityStateDisabled`, `ImmutabilityStateLocked`, `ImmutabilityStateUnlocked`
+- New type alias `PublicNetworkAccess` with values `PublicNetworkAccessDisabled`, `PublicNetworkAccessEnabled`
+- New type alias `VaultSubResourceType` with values `VaultSubResourceTypeAzureBackup`, `VaultSubResourceTypeAzureBackupSecondary`, `VaultSubResourceTypeAzureSiteRecovery`
+- New function `*Client.Capabilities(context.Context, string, ResourceCapabilities, *ClientCapabilitiesOptions) (ClientCapabilitiesResponse, error)`
+- New struct `CapabilitiesProperties`
+- New struct `CapabilitiesResponse`
+- New struct `CapabilitiesResponseProperties`
+- New struct `DNSZone`
+- New struct `DNSZoneResponse`
+- New struct `ImmutabilitySettings`
+- New struct `ResourceCapabilities`
+- New struct `ResourceCapabilitiesBase`
+- New struct `SecuritySettings`
+- New field `GroupIDs` in struct `PrivateEndpointConnection`
+- New field `PublicNetworkAccess` in struct `VaultProperties`
+- New field `SecuritySettings` in struct `VaultProperties`
+
+
 ## 1.1.0 (2022-07-22)
 ### Features Added
 

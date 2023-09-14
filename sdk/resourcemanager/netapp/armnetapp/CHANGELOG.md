@@ -1,5 +1,54 @@
 # Release History
 
+## 4.1.0 (2023-07-28)
+### Features Added
+
+- New value `RegionStorageToNetworkProximityAcrossT2`, `RegionStorageToNetworkProximityT1AndAcrossT2`, `RegionStorageToNetworkProximityT1AndT2AndAcrossT2`, `RegionStorageToNetworkProximityT2AndAcrossT2` added to enum type `RegionStorageToNetworkProximity`
+- New value `VolumeStorageToNetworkProximityAcrossT2` added to enum type `VolumeStorageToNetworkProximity`
+- New function `*VolumesClient.BeginListGetGroupIDListForLdapUser(context.Context, string, string, string, string, GetGroupIDListForLDAPUserRequest, *VolumesClientBeginListGetGroupIDListForLdapUserOptions) (*runtime.Poller[VolumesClientListGetGroupIDListForLdapUserResponse], error)`
+- New struct `GetGroupIDListForLDAPUserRequest`
+- New struct `GetGroupIDListForLDAPUserResponse`
+- New field `Identity` in struct `AccountPatch`
+- New field `SnapshotDirectoryVisible` in struct `VolumePatchProperties`
+- New field `ActualThroughputMibps`, `OriginatingResourceID` in struct `VolumeProperties`
+
+
+## 4.0.0 (2023-03-24)
+### Breaking Changes
+
+- Type of `Account.Identity` has been changed from `*Identity` to `*ManagedServiceIdentity`
+- Type alias `IdentityType` has been removed
+- Function `NewVaultsClient` has been removed
+- Function `*VaultsClient.NewListPager` has been removed
+- Struct `Identity` has been removed
+- Struct `Vault` has been removed
+- Struct `VaultList` has been removed
+- Struct `VaultProperties` has been removed
+- Struct `VaultsClient` has been removed
+- Field `VaultID` of struct `VolumeBackupProperties` has been removed
+
+### Features Added
+
+- New struct `ClientFactory` which is a client factory used to create any client in this module
+- New enum type `FileAccessLogs` with values `FileAccessLogsDisabled`, `FileAccessLogsEnabled`
+- New enum type `ManagedServiceIdentityType` with values `ManagedServiceIdentityTypeNone`, `ManagedServiceIdentityTypeSystemAssigned`, `ManagedServiceIdentityTypeSystemAssignedUserAssigned`, `ManagedServiceIdentityTypeUserAssigned`
+- New function `*BackupsClient.BeginRestoreFiles(context.Context, string, string, string, string, string, BackupRestoreFiles, *BackupsClientBeginRestoreFilesOptions) (*runtime.Poller[BackupsClientRestoreFilesResponse], error)`
+- New function `*VolumesClient.BeginBreakFileLocks(context.Context, string, string, string, string, *VolumesClientBeginBreakFileLocksOptions) (*runtime.Poller[VolumesClientBreakFileLocksResponse], error)`
+- New struct `BackupRestoreFiles`
+- New struct `BreakFileLocksRequest`
+- New struct `ManagedServiceIdentity`
+- New struct `VolumeRelocationProperties`
+- New field `PreferredServersForLdapClient` in struct `ActiveDirectory`
+- New field `SystemData` in struct `Backup`
+- New field `SystemData` in struct `Snapshot`
+- New field `DataStoreResourceID` in struct `VolumeProperties`
+- New field `FileAccessLogs` in struct `VolumeProperties`
+- New field `IsLargeVolume` in struct `VolumeProperties`
+- New field `ProvisionedAvailabilityZone` in struct `VolumeProperties`
+- New field `VolumeRelocation` in struct `VolumePropertiesDataProtection`
+- New field `Tags` in struct `VolumeQuotaRulePatch`
+
+
 ## 3.0.0 (2022-09-16)
 ### Breaking Changes
 

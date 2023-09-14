@@ -10,12 +10,13 @@ package testcommon
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
 	"encoding/base64"
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"hash/crc64"
 	"io"
+	"math/rand"
 	"os"
 	"runtime"
 	"strconv"
@@ -28,6 +29,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/recording"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/internal/shared"
 	"github.com/stretchr/testify/require"
 )
 
@@ -81,9 +83,12 @@ func GetReaderToGeneratedBytes(n int) io.ReadSeekCloser {
 	return streaming.NopCloser(r)
 }
 
-func GetRandomDataAndReader(n int) (*bytes.Reader, []byte) {
+func GetDataAndReader(testName string, n int) (*bytes.Reader, []byte) {
+	// Random seed for data generation
+	seed := int64(crc64.Checksum([]byte(testName), shared.CRC64Table))
+	random := rand.New(rand.NewSource(seed))
 	data := make([]byte, n)
-	_, _ = rand.Read(data)
+	_, _ = random.Read(data)
 	return bytes.NewReader(data), data
 }
 
@@ -140,7 +145,7 @@ func BlobListToMap(list []string) map[string]bool {
 }
 
 func ValidateHTTPErrorCode(_require *require.Assertions, err error, code int) {
-	_require.NotNil(err)
+	_require.Error(err)
 	var responseErr *azcore.ResponseError
 	errors.As(err, &responseErr)
 	if responseErr != nil {
@@ -151,7 +156,7 @@ func ValidateHTTPErrorCode(_require *require.Assertions, err error, code int) {
 }
 
 func ValidateBlobErrorCode(_require *require.Assertions, err error, code bloberror.Code) {
-	_require.NotNil(err)
+	_require.Error(err)
 	var responseErr *azcore.ResponseError
 	errors.As(err, &responseErr)
 	if responseErr != nil {
@@ -163,9 +168,9 @@ func ValidateBlobErrorCode(_require *require.Assertions, err error, code bloberr
 
 func ValidateUpload(ctx context.Context, _require *require.Assertions, blobClient *blockblob.Client) {
 	resp, err := blobClient.DownloadStream(ctx, nil)
-	_require.Nil(err)
+	_require.NoError(err)
 	data, err := io.ReadAll(resp.Body)
-	_require.Nil(err)
+	_require.NoError(err)
 	_require.Len(data, 0)
 }
 
@@ -181,8 +186,11 @@ func GetRequiredEnv(name string) (string, error) {
 
 func BeforeTest(t *testing.T, suite string, test string) {
 	const urlRegex = `https://\S+\.blob\.core\.windows\.net`
+	const tokenRegex = `(?:Bearer\s).*`
+	//const queryParamRegex = `=([^&|\n|\t\s]+)` // Note: Add query param name before this
 	require.NoError(t, recording.AddURISanitizer(FakeStorageURL, urlRegex, nil))
 	require.NoError(t, recording.AddHeaderRegexSanitizer("x-ms-copy-source", FakeStorageURL, urlRegex, nil))
+	require.NoError(t, recording.AddHeaderRegexSanitizer("x-ms-copy-source-authorization", FakeToken, tokenRegex, nil))
 	// we freeze request IDs and timestamps to avoid creating noisy diffs
 	// NOTE: we can't freeze time stamps as that breaks some tests that use if-modified-since etc (maybe it can be fixed?)
 	//testframework.AddHeaderRegexSanitizer("X-Ms-Date", "Wed, 10 Aug 2022 23:34:14 GMT", "", nil)

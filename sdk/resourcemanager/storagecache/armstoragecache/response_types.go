@@ -9,32 +9,72 @@
 
 package armstoragecache
 
+// AmlFilesystemsClientArchiveResponse contains the response from method AmlFilesystemsClient.Archive.
+type AmlFilesystemsClientArchiveResponse struct {
+	// placeholder for future response values
+}
+
+// AmlFilesystemsClientCancelArchiveResponse contains the response from method AmlFilesystemsClient.CancelArchive.
+type AmlFilesystemsClientCancelArchiveResponse struct {
+	// placeholder for future response values
+}
+
+// AmlFilesystemsClientCreateOrUpdateResponse contains the response from method AmlFilesystemsClient.BeginCreateOrUpdate.
+type AmlFilesystemsClientCreateOrUpdateResponse struct {
+	AmlFilesystem
+}
+
+// AmlFilesystemsClientDeleteResponse contains the response from method AmlFilesystemsClient.BeginDelete.
+type AmlFilesystemsClientDeleteResponse struct {
+	// placeholder for future response values
+}
+
+// AmlFilesystemsClientGetResponse contains the response from method AmlFilesystemsClient.Get.
+type AmlFilesystemsClientGetResponse struct {
+	AmlFilesystem
+}
+
+// AmlFilesystemsClientListByResourceGroupResponse contains the response from method AmlFilesystemsClient.NewListByResourceGroupPager.
+type AmlFilesystemsClientListByResourceGroupResponse struct {
+	AmlFilesystemsListResult
+}
+
+// AmlFilesystemsClientListResponse contains the response from method AmlFilesystemsClient.NewListPager.
+type AmlFilesystemsClientListResponse struct {
+	AmlFilesystemsListResult
+}
+
+// AmlFilesystemsClientUpdateResponse contains the response from method AmlFilesystemsClient.BeginUpdate.
+type AmlFilesystemsClientUpdateResponse struct {
+	AmlFilesystem
+}
+
 // AscOperationsClientGetResponse contains the response from method AscOperationsClient.Get.
 type AscOperationsClientGetResponse struct {
 	AscOperation
 }
 
-// AscUsagesClientListResponse contains the response from method AscUsagesClient.List.
+// AscUsagesClientListResponse contains the response from method AscUsagesClient.NewListPager.
 type AscUsagesClientListResponse struct {
 	ResourceUsagesListResult
 }
 
-// CachesClientCreateOrUpdateResponse contains the response from method CachesClient.CreateOrUpdate.
+// CachesClientCreateOrUpdateResponse contains the response from method CachesClient.BeginCreateOrUpdate.
 type CachesClientCreateOrUpdateResponse struct {
 	Cache
 }
 
-// CachesClientDebugInfoResponse contains the response from method CachesClient.DebugInfo.
+// CachesClientDebugInfoResponse contains the response from method CachesClient.BeginDebugInfo.
 type CachesClientDebugInfoResponse struct {
 	// placeholder for future response values
 }
 
-// CachesClientDeleteResponse contains the response from method CachesClient.Delete.
+// CachesClientDeleteResponse contains the response from method CachesClient.BeginDelete.
 type CachesClientDeleteResponse struct {
 	// placeholder for future response values
 }
 
-// CachesClientFlushResponse contains the response from method CachesClient.Flush.
+// CachesClientFlushResponse contains the response from method CachesClient.BeginFlush.
 type CachesClientFlushResponse struct {
 	// placeholder for future response values
 }
@@ -44,102 +84,112 @@ type CachesClientGetResponse struct {
 	Cache
 }
 
-// CachesClientListByResourceGroupResponse contains the response from method CachesClient.ListByResourceGroup.
+// CachesClientListByResourceGroupResponse contains the response from method CachesClient.NewListByResourceGroupPager.
 type CachesClientListByResourceGroupResponse struct {
 	CachesListResult
 }
 
-// CachesClientListResponse contains the response from method CachesClient.List.
+// CachesClientListResponse contains the response from method CachesClient.NewListPager.
 type CachesClientListResponse struct {
 	CachesListResult
 }
 
-// CachesClientPausePrimingJobResponse contains the response from method CachesClient.PausePrimingJob.
+// CachesClientPausePrimingJobResponse contains the response from method CachesClient.BeginPausePrimingJob.
 type CachesClientPausePrimingJobResponse struct {
 	// placeholder for future response values
 }
 
-// CachesClientResumePrimingJobResponse contains the response from method CachesClient.ResumePrimingJob.
+// CachesClientResumePrimingJobResponse contains the response from method CachesClient.BeginResumePrimingJob.
 type CachesClientResumePrimingJobResponse struct {
 	// placeholder for future response values
 }
 
-// CachesClientSpaceAllocationResponse contains the response from method CachesClient.SpaceAllocation.
+// CachesClientSpaceAllocationResponse contains the response from method CachesClient.BeginSpaceAllocation.
 type CachesClientSpaceAllocationResponse struct {
 	// placeholder for future response values
 }
 
-// CachesClientStartPrimingJobResponse contains the response from method CachesClient.StartPrimingJob.
+// CachesClientStartPrimingJobResponse contains the response from method CachesClient.BeginStartPrimingJob.
 type CachesClientStartPrimingJobResponse struct {
 	// placeholder for future response values
 }
 
-// CachesClientStartResponse contains the response from method CachesClient.Start.
+// CachesClientStartResponse contains the response from method CachesClient.BeginStart.
 type CachesClientStartResponse struct {
 	// placeholder for future response values
 }
 
-// CachesClientStopPrimingJobResponse contains the response from method CachesClient.StopPrimingJob.
+// CachesClientStopPrimingJobResponse contains the response from method CachesClient.BeginStopPrimingJob.
 type CachesClientStopPrimingJobResponse struct {
 	// placeholder for future response values
 }
 
-// CachesClientStopResponse contains the response from method CachesClient.Stop.
+// CachesClientStopResponse contains the response from method CachesClient.BeginStop.
 type CachesClientStopResponse struct {
 	// placeholder for future response values
 }
 
-// CachesClientUpdateResponse contains the response from method CachesClient.Update.
+// CachesClientUpdateResponse contains the response from method CachesClient.BeginUpdate.
 type CachesClientUpdateResponse struct {
 	Cache
 }
 
-// CachesClientUpgradeFirmwareResponse contains the response from method CachesClient.UpgradeFirmware.
+// CachesClientUpgradeFirmwareResponse contains the response from method CachesClient.BeginUpgradeFirmware.
 type CachesClientUpgradeFirmwareResponse struct {
 	// placeholder for future response values
 }
 
-// OperationsClientListResponse contains the response from method OperationsClient.List.
+// ManagementClientCheckAmlFSSubnetsResponse contains the response from method ManagementClient.CheckAmlFSSubnets.
+type ManagementClientCheckAmlFSSubnetsResponse struct {
+	// placeholder for future response values
+}
+
+// ManagementClientGetRequiredAmlFSSubnetsSizeResponse contains the response from method ManagementClient.GetRequiredAmlFSSubnetsSize.
+type ManagementClientGetRequiredAmlFSSubnetsSizeResponse struct {
+	RequiredAmlFilesystemSubnetsSize
+}
+
+// OperationsClientListResponse contains the response from method OperationsClient.NewListPager.
 type OperationsClientListResponse struct {
 	APIOperationListResult
 }
 
-// SKUsClientListResponse contains the response from method SKUsClient.List.
+// SKUsClientListResponse contains the response from method SKUsClient.NewListPager.
 type SKUsClientListResponse struct {
 	ResourceSKUsResult
 }
 
-// StorageTargetClientFlushResponse contains the response from method StorageTargetClient.Flush.
+// StorageTargetClientFlushResponse contains the response from method StorageTargetClient.BeginFlush.
 type StorageTargetClientFlushResponse struct {
 	// placeholder for future response values
 }
 
-// StorageTargetClientInvalidateResponse contains the response from method StorageTargetClient.Invalidate.
+// StorageTargetClientInvalidateResponse contains the response from method StorageTargetClient.BeginInvalidate.
 type StorageTargetClientInvalidateResponse struct {
 	// placeholder for future response values
 }
 
-// StorageTargetClientResumeResponse contains the response from method StorageTargetClient.Resume.
+// StorageTargetClientResumeResponse contains the response from method StorageTargetClient.BeginResume.
 type StorageTargetClientResumeResponse struct {
 	// placeholder for future response values
 }
 
-// StorageTargetClientSuspendResponse contains the response from method StorageTargetClient.Suspend.
+// StorageTargetClientSuspendResponse contains the response from method StorageTargetClient.BeginSuspend.
 type StorageTargetClientSuspendResponse struct {
 	// placeholder for future response values
 }
 
-// StorageTargetsClientCreateOrUpdateResponse contains the response from method StorageTargetsClient.CreateOrUpdate.
+// StorageTargetsClientCreateOrUpdateResponse contains the response from method StorageTargetsClient.BeginCreateOrUpdate.
 type StorageTargetsClientCreateOrUpdateResponse struct {
 	StorageTarget
 }
 
-// StorageTargetsClientDNSRefreshResponse contains the response from method StorageTargetsClient.DNSRefresh.
+// StorageTargetsClientDNSRefreshResponse contains the response from method StorageTargetsClient.BeginDNSRefresh.
 type StorageTargetsClientDNSRefreshResponse struct {
 	// placeholder for future response values
 }
 
-// StorageTargetsClientDeleteResponse contains the response from method StorageTargetsClient.Delete.
+// StorageTargetsClientDeleteResponse contains the response from method StorageTargetsClient.BeginDelete.
 type StorageTargetsClientDeleteResponse struct {
 	// placeholder for future response values
 }
@@ -149,12 +199,17 @@ type StorageTargetsClientGetResponse struct {
 	StorageTarget
 }
 
-// StorageTargetsClientListByCacheResponse contains the response from method StorageTargetsClient.ListByCache.
+// StorageTargetsClientListByCacheResponse contains the response from method StorageTargetsClient.NewListByCachePager.
 type StorageTargetsClientListByCacheResponse struct {
 	StorageTargetsResult
 }
 
-// UsageModelsClientListResponse contains the response from method UsageModelsClient.List.
+// StorageTargetsClientRestoreDefaultsResponse contains the response from method StorageTargetsClient.BeginRestoreDefaults.
+type StorageTargetsClientRestoreDefaultsResponse struct {
+	// placeholder for future response values
+}
+
+// UsageModelsClientListResponse contains the response from method UsageModelsClient.NewListPager.
 type UsageModelsClientListResponse struct {
 	UsageModelsResult
 }

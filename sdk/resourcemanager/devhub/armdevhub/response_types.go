@@ -9,6 +9,12 @@
 
 package armdevhub
 
+// DeveloperHubServiceClientGeneratePreviewArtifactsResponse contains the response from method DeveloperHubServiceClient.GeneratePreviewArtifacts.
+type DeveloperHubServiceClientGeneratePreviewArtifactsResponse struct {
+	// Dockerfile and manifest artifacts generated as a preview are returned as a map<path string,content string>
+	Value map[string]*string
+}
+
 // DeveloperHubServiceClientGitHubOAuthCallbackResponse contains the response from method DeveloperHubServiceClient.GitHubOAuthCallback.
 type DeveloperHubServiceClientGitHubOAuthCallbackResponse struct {
 	GitHubOAuthResponse
@@ -44,12 +50,12 @@ type WorkflowClientGetResponse struct {
 	Workflow
 }
 
-// WorkflowClientListByResourceGroupResponse contains the response from method WorkflowClient.ListByResourceGroup.
+// WorkflowClientListByResourceGroupResponse contains the response from method WorkflowClient.NewListByResourceGroupPager.
 type WorkflowClientListByResourceGroupResponse struct {
 	WorkflowListResult
 }
 
-// WorkflowClientListResponse contains the response from method WorkflowClient.List.
+// WorkflowClientListResponse contains the response from method WorkflowClient.NewListPager.
 type WorkflowClientListResponse struct {
 	WorkflowListResult
 }

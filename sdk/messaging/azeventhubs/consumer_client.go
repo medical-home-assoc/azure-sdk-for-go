@@ -13,37 +13,17 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/uuid"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azeventhubs/internal"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azeventhubs/internal/amqpwrap"
-	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azeventhubs/internal/exported"
-)
-
-// Error represents an Event Hub specific error.
-// NOTE: the Code is considered part of the published API but the message that
-// comes back from Error(), as well as the underlying wrapped error, are NOT and
-// are subject to change.
-type Error = exported.Error
-
-// ErrorCode is an error code, usable by consuming code to work with
-// programatically.
-type ErrorCode = exported.ErrorCode
-
-const (
-	// ErrorCodeConnectionLost means our connection was lost and all retry attempts failed.
-	// This typically reflects an extended outage or connection disruption and may
-	// require manual intervention.
-	ErrorCodeConnectionLost ErrorCode = exported.ErrorCodeConnectionLost
-
-	// ErrorCodeOwnershipLost means that a partition that you were reading from was opened
-	// by another link with a higher epoch/owner level.
-	ErrorCodeOwnershipLost ErrorCode = exported.ErrorCodeOwnershipLost
 )
 
 // ConsumerClientOptions configures optional parameters for a ConsumerClient.
 type ConsumerClientOptions struct {
-	// TLSConfig configures a client with a custom *tls.Config.
-	TLSConfig *tls.Config
-
-	// Application ID that will be passed to the namespace.
+	// ApplicationID is used as the identifier when setting the User-Agent property.
 	ApplicationID string
+
+	// InstanceID is a unique name used to identify the consumer. This can help with
+	// diagnostics as this name will be returned in error messages. By default,
+	// an identifier will be automatically generated.
+	InstanceID string
 
 	// NewWebSocketConn is a function that can create a net.Conn for use with websockets.
 	// For an example, see ExampleNewClient_usingWebsockets() function in example_client_test.go.
@@ -52,6 +32,9 @@ type ConsumerClientOptions struct {
 	// RetryOptions controls how often operations are retried from this client and any
 	// Receivers and Senders created from this client.
 	RetryOptions RetryOptions
+
+	// TLSConfig configures a client with a custom *tls.Config.
+	TLSConfig *tls.Config
 }
 
 // ConsumerClient can create PartitionClient instances, which can read events from
@@ -59,15 +42,19 @@ type ConsumerClientOptions struct {
 type ConsumerClient struct {
 	consumerGroup string
 	eventHub      string
-	retryOptions  RetryOptions
-	namespace     *internal.Namespace
-	links         *internal.Links[amqpwrap.AMQPReceiverCloser]
 
-	clientID string
+	// instanceID is a customer supplied instanceID that can be passed to Event Hubs.
+	// It'll be returned in error messages and can be useful for customers when
+	// troubleshooting.
+	instanceID string
+
+	links        *internal.Links[amqpwrap.RPCLink]
+	namespace    *internal.Namespace
+	retryOptions RetryOptions
 }
 
 // NewConsumerClient creates a ConsumerClient which uses an azcore.TokenCredential for authentication. You
-// MUST call [azeventhubs.ConsumerClient.Close] on this client to avoid leaking resources.
+// MUST call [ConsumerClient.Close] on this client to avoid leaking resources.
 //
 // The fullyQualifiedNamespace is the Event Hubs namespace name (ex: myeventhub.servicebus.windows.net)
 // The credential is one of the credentials in the [azidentity] package.
@@ -83,7 +70,7 @@ func NewConsumerClient(fullyQualifiedNamespace string, eventHub string, consumer
 }
 
 // NewConsumerClientFromConnectionString creates a ConsumerClient from a connection string. You
-// MUST call [azeventhubs.ConsumerClient.Close] on this client to avoid leaking resources.
+// MUST call [ConsumerClient.Close] on this client to avoid leaking resources.
 //
 // connectionString can be one of two formats - with or without an EntityPath key.
 //
@@ -114,6 +101,12 @@ type PartitionClientOptions struct {
 	// StartPosition is the position we will start receiving events from,
 	// either an offset (inclusive) with Offset, or receiving events received
 	// after a specific time using EnqueuedTime.
+	//
+	// NOTE: you can also use the [Processor], which will automatically manage the start
+	// value using a [CheckpointStore]. See [example_consuming_with_checkpoints_test.go] for an
+	// example.
+	//
+	// [example_consuming_with_checkpoints_test.go]: https://github.com/Azure/azure-sdk-for-go/blob/main/sdk/messaging/azeventhubs/example_consuming_with_checkpoints_test.go
 	StartPosition StartPosition
 
 	// OwnerLevel is the priority for this partition client, also known as the 'epoch' level.
@@ -141,6 +134,7 @@ func (cc *ConsumerClient) NewPartitionClient(partitionID string, options *Partit
 		namespace:     cc.namespace,
 		eventHub:      cc.eventHub,
 		partitionID:   partitionID,
+		instanceID:    cc.instanceID,
 		consumerGroup: cc.consumerGroup,
 		retryOptions:  cc.retryOptions,
 	}, options)
@@ -148,31 +142,19 @@ func (cc *ConsumerClient) NewPartitionClient(partitionID string, options *Partit
 
 // GetEventHubProperties gets event hub properties, like the available partition IDs and when the Event Hub was created.
 func (cc *ConsumerClient) GetEventHubProperties(ctx context.Context, options *GetEventHubPropertiesOptions) (EventHubProperties, error) {
-	rpcLink, err := cc.links.GetManagementLink(ctx)
-
-	if err != nil {
-		return EventHubProperties{}, err
-	}
-
-	return getEventHubProperties(ctx, cc.namespace, rpcLink.Link, cc.eventHub, options)
+	return getEventHubProperties(ctx, EventConsumer, cc.namespace, cc.links, cc.eventHub, cc.retryOptions, options)
 }
 
 // GetPartitionProperties gets properties for a specific partition. This includes data like the
 // last enqueued sequence number, the first sequence number and when an event was last enqueued
 // to the partition.
 func (cc *ConsumerClient) GetPartitionProperties(ctx context.Context, partitionID string, options *GetPartitionPropertiesOptions) (PartitionProperties, error) {
-	rpcLink, err := cc.links.GetManagementLink(ctx)
-
-	if err != nil {
-		return PartitionProperties{}, err
-	}
-
-	return getPartitionProperties(ctx, cc.namespace, rpcLink.Link, cc.eventHub, partitionID, options)
+	return getPartitionProperties(ctx, EventConsumer, cc.namespace, cc.links, cc.eventHub, partitionID, cc.retryOptions, options)
 }
 
-// ID is the identifier for this ConsumerClient.
-func (cc *ConsumerClient) ID() string {
-	return cc.clientID
+// InstanceID is the identifier for this ConsumerClient.
+func (cc *ConsumerClient) InstanceID() string {
+	return cc.instanceID
 }
 
 type consumerClientDetails struct {
@@ -187,7 +169,7 @@ func (cc *ConsumerClient) getDetails() consumerClientDetails {
 		FullyQualifiedNamespace: cc.namespace.FQDN,
 		ConsumerGroup:           cc.consumerGroup,
 		EventHubName:            cc.eventHub,
-		ClientID:                cc.clientID,
+		ClientID:                cc.InstanceID(),
 	}
 }
 
@@ -212,7 +194,7 @@ func newConsumerClient(args consumerClientArgs, options *ConsumerClientOptions) 
 		options = &ConsumerClientOptions{}
 	}
 
-	clientUUID, err := uuid.New()
+	instanceID, err := getInstanceID(options.InstanceID)
 
 	if err != nil {
 		return nil, err
@@ -221,7 +203,7 @@ func newConsumerClient(args consumerClientArgs, options *ConsumerClientOptions) 
 	client := &ConsumerClient{
 		consumerGroup: args.consumerGroup,
 		eventHub:      args.eventHub,
-		clientID:      clientUUID.String(),
+		instanceID:    instanceID,
 	}
 
 	var nsOptions []internal.NamespaceOption
@@ -259,7 +241,22 @@ func newConsumerClient(args consumerClientArgs, options *ConsumerClientOptions) 
 	}
 
 	client.namespace = tempNS
-	client.links = internal.NewLinks[amqpwrap.AMQPReceiverCloser](tempNS, fmt.Sprintf("%s/$management", client.eventHub), nil, nil)
+	client.links = internal.NewLinks[amqpwrap.RPCLink](tempNS, fmt.Sprintf("%s/$management", client.eventHub), nil, nil)
 
 	return client, nil
+}
+
+func getInstanceID(optionalID string) (string, error) {
+	if optionalID != "" {
+		return optionalID, nil
+	}
+
+	// generate a new one
+	id, err := uuid.New()
+
+	if err != nil {
+		return "", err
+	}
+
+	return id.String(), nil
 }

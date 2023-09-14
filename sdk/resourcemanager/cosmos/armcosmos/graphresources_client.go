@@ -14,8 +14,6 @@ import (
 	"errors"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
-	armruntime "github.com/Azure/azure-sdk-for-go/sdk/azcore/arm/runtime"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"net/http"
@@ -26,65 +24,58 @@ import (
 // GraphResourcesClient contains the methods for the GraphResources group.
 // Don't use this type directly, use NewGraphResourcesClient() instead.
 type GraphResourcesClient struct {
-	host           string
+	internal       *arm.Client
 	subscriptionID string
-	pl             runtime.Pipeline
 }
 
 // NewGraphResourcesClient creates a new instance of GraphResourcesClient with the specified values.
-// subscriptionID - The ID of the target subscription.
-// credential - used to authorize requests. Usually a credential from azidentity.
-// options - pass nil to accept the default values.
+//   - subscriptionID - The ID of the target subscription.
+//   - credential - used to authorize requests. Usually a credential from azidentity.
+//   - options - pass nil to accept the default values.
 func NewGraphResourcesClient(subscriptionID string, credential azcore.TokenCredential, options *arm.ClientOptions) (*GraphResourcesClient, error) {
-	if options == nil {
-		options = &arm.ClientOptions{}
-	}
-	ep := cloud.AzurePublic.Services[cloud.ResourceManager].Endpoint
-	if c, ok := options.Cloud.Services[cloud.ResourceManager]; ok {
-		ep = c.Endpoint
-	}
-	pl, err := armruntime.NewPipeline(moduleName, moduleVersion, credential, runtime.PipelineOptions{}, options)
+	cl, err := arm.NewClient(moduleName+".GraphResourcesClient", moduleVersion, credential, options)
 	if err != nil {
 		return nil, err
 	}
 	client := &GraphResourcesClient{
 		subscriptionID: subscriptionID,
-		host:           ep,
-		pl:             pl,
+		internal:       cl,
 	}
 	return client, nil
 }
 
 // BeginCreateUpdateGraph - Create or update an Azure Cosmos DB Graph.
 // If the operation fails it returns an *azcore.ResponseError type.
-// Generated from API version 2022-08-15-preview
-// resourceGroupName - The name of the resource group. The name is case insensitive.
-// accountName - Cosmos DB database account name.
-// graphName - Cosmos DB graph resource name.
-// createUpdateGraphParameters - The parameters to provide for the current graph.
-// options - GraphResourcesClientBeginCreateUpdateGraphOptions contains the optional parameters for the GraphResourcesClient.BeginCreateUpdateGraph
-// method.
+//
+// Generated from API version 2023-03-15-preview
+//   - resourceGroupName - The name of the resource group. The name is case insensitive.
+//   - accountName - Cosmos DB database account name.
+//   - graphName - Cosmos DB graph resource name.
+//   - createUpdateGraphParameters - The parameters to provide for the current graph.
+//   - options - GraphResourcesClientBeginCreateUpdateGraphOptions contains the optional parameters for the GraphResourcesClient.BeginCreateUpdateGraph
+//     method.
 func (client *GraphResourcesClient) BeginCreateUpdateGraph(ctx context.Context, resourceGroupName string, accountName string, graphName string, createUpdateGraphParameters GraphResourceCreateUpdateParameters, options *GraphResourcesClientBeginCreateUpdateGraphOptions) (*runtime.Poller[GraphResourcesClientCreateUpdateGraphResponse], error) {
 	if options == nil || options.ResumeToken == "" {
 		resp, err := client.createUpdateGraph(ctx, resourceGroupName, accountName, graphName, createUpdateGraphParameters, options)
 		if err != nil {
 			return nil, err
 		}
-		return runtime.NewPoller[GraphResourcesClientCreateUpdateGraphResponse](resp, client.pl, nil)
+		return runtime.NewPoller[GraphResourcesClientCreateUpdateGraphResponse](resp, client.internal.Pipeline(), nil)
 	} else {
-		return runtime.NewPollerFromResumeToken[GraphResourcesClientCreateUpdateGraphResponse](options.ResumeToken, client.pl, nil)
+		return runtime.NewPollerFromResumeToken[GraphResourcesClientCreateUpdateGraphResponse](options.ResumeToken, client.internal.Pipeline(), nil)
 	}
 }
 
 // CreateUpdateGraph - Create or update an Azure Cosmos DB Graph.
 // If the operation fails it returns an *azcore.ResponseError type.
-// Generated from API version 2022-08-15-preview
+//
+// Generated from API version 2023-03-15-preview
 func (client *GraphResourcesClient) createUpdateGraph(ctx context.Context, resourceGroupName string, accountName string, graphName string, createUpdateGraphParameters GraphResourceCreateUpdateParameters, options *GraphResourcesClientBeginCreateUpdateGraphOptions) (*http.Response, error) {
 	req, err := client.createUpdateGraphCreateRequest(ctx, resourceGroupName, accountName, graphName, createUpdateGraphParameters, options)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := client.pl.Do(req)
+	resp, err := client.internal.Pipeline().Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -113,12 +104,12 @@ func (client *GraphResourcesClient) createUpdateGraphCreateRequest(ctx context.C
 		return nil, errors.New("parameter graphName cannot be empty")
 	}
 	urlPath = strings.ReplaceAll(urlPath, "{graphName}", url.PathEscape(graphName))
-	req, err := runtime.NewRequest(ctx, http.MethodPut, runtime.JoinPaths(client.host, urlPath))
+	req, err := runtime.NewRequest(ctx, http.MethodPut, runtime.JoinPaths(client.internal.Endpoint(), urlPath))
 	if err != nil {
 		return nil, err
 	}
 	reqQP := req.Raw().URL.Query()
-	reqQP.Set("api-version", "2022-08-15-preview")
+	reqQP.Set("api-version", "2023-03-15-preview")
 	req.Raw().URL.RawQuery = reqQP.Encode()
 	req.Raw().Header["Accept"] = []string{"application/json"}
 	return req, runtime.MarshalAsJSON(req, createUpdateGraphParameters)
@@ -126,33 +117,35 @@ func (client *GraphResourcesClient) createUpdateGraphCreateRequest(ctx context.C
 
 // BeginDeleteGraphResource - Deletes an existing Azure Cosmos DB Graph Resource.
 // If the operation fails it returns an *azcore.ResponseError type.
-// Generated from API version 2022-08-15-preview
-// resourceGroupName - The name of the resource group. The name is case insensitive.
-// accountName - Cosmos DB database account name.
-// graphName - Cosmos DB graph resource name.
-// options - GraphResourcesClientBeginDeleteGraphResourceOptions contains the optional parameters for the GraphResourcesClient.BeginDeleteGraphResource
-// method.
+//
+// Generated from API version 2023-03-15-preview
+//   - resourceGroupName - The name of the resource group. The name is case insensitive.
+//   - accountName - Cosmos DB database account name.
+//   - graphName - Cosmos DB graph resource name.
+//   - options - GraphResourcesClientBeginDeleteGraphResourceOptions contains the optional parameters for the GraphResourcesClient.BeginDeleteGraphResource
+//     method.
 func (client *GraphResourcesClient) BeginDeleteGraphResource(ctx context.Context, resourceGroupName string, accountName string, graphName string, options *GraphResourcesClientBeginDeleteGraphResourceOptions) (*runtime.Poller[GraphResourcesClientDeleteGraphResourceResponse], error) {
 	if options == nil || options.ResumeToken == "" {
 		resp, err := client.deleteGraphResource(ctx, resourceGroupName, accountName, graphName, options)
 		if err != nil {
 			return nil, err
 		}
-		return runtime.NewPoller[GraphResourcesClientDeleteGraphResourceResponse](resp, client.pl, nil)
+		return runtime.NewPoller[GraphResourcesClientDeleteGraphResourceResponse](resp, client.internal.Pipeline(), nil)
 	} else {
-		return runtime.NewPollerFromResumeToken[GraphResourcesClientDeleteGraphResourceResponse](options.ResumeToken, client.pl, nil)
+		return runtime.NewPollerFromResumeToken[GraphResourcesClientDeleteGraphResourceResponse](options.ResumeToken, client.internal.Pipeline(), nil)
 	}
 }
 
 // DeleteGraphResource - Deletes an existing Azure Cosmos DB Graph Resource.
 // If the operation fails it returns an *azcore.ResponseError type.
-// Generated from API version 2022-08-15-preview
+//
+// Generated from API version 2023-03-15-preview
 func (client *GraphResourcesClient) deleteGraphResource(ctx context.Context, resourceGroupName string, accountName string, graphName string, options *GraphResourcesClientBeginDeleteGraphResourceOptions) (*http.Response, error) {
 	req, err := client.deleteGraphResourceCreateRequest(ctx, resourceGroupName, accountName, graphName, options)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := client.pl.Do(req)
+	resp, err := client.internal.Pipeline().Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -181,29 +174,30 @@ func (client *GraphResourcesClient) deleteGraphResourceCreateRequest(ctx context
 		return nil, errors.New("parameter graphName cannot be empty")
 	}
 	urlPath = strings.ReplaceAll(urlPath, "{graphName}", url.PathEscape(graphName))
-	req, err := runtime.NewRequest(ctx, http.MethodDelete, runtime.JoinPaths(client.host, urlPath))
+	req, err := runtime.NewRequest(ctx, http.MethodDelete, runtime.JoinPaths(client.internal.Endpoint(), urlPath))
 	if err != nil {
 		return nil, err
 	}
 	reqQP := req.Raw().URL.Query()
-	reqQP.Set("api-version", "2022-08-15-preview")
+	reqQP.Set("api-version", "2023-03-15-preview")
 	req.Raw().URL.RawQuery = reqQP.Encode()
 	return req, nil
 }
 
 // GetGraph - Gets the Graph resource under an existing Azure Cosmos DB database account with the provided name.
 // If the operation fails it returns an *azcore.ResponseError type.
-// Generated from API version 2022-08-15-preview
-// resourceGroupName - The name of the resource group. The name is case insensitive.
-// accountName - Cosmos DB database account name.
-// graphName - Cosmos DB graph resource name.
-// options - GraphResourcesClientGetGraphOptions contains the optional parameters for the GraphResourcesClient.GetGraph method.
+//
+// Generated from API version 2023-03-15-preview
+//   - resourceGroupName - The name of the resource group. The name is case insensitive.
+//   - accountName - Cosmos DB database account name.
+//   - graphName - Cosmos DB graph resource name.
+//   - options - GraphResourcesClientGetGraphOptions contains the optional parameters for the GraphResourcesClient.GetGraph method.
 func (client *GraphResourcesClient) GetGraph(ctx context.Context, resourceGroupName string, accountName string, graphName string, options *GraphResourcesClientGetGraphOptions) (GraphResourcesClientGetGraphResponse, error) {
 	req, err := client.getGraphCreateRequest(ctx, resourceGroupName, accountName, graphName, options)
 	if err != nil {
 		return GraphResourcesClientGetGraphResponse{}, err
 	}
-	resp, err := client.pl.Do(req)
+	resp, err := client.internal.Pipeline().Do(req)
 	if err != nil {
 		return GraphResourcesClientGetGraphResponse{}, err
 	}
@@ -232,12 +226,12 @@ func (client *GraphResourcesClient) getGraphCreateRequest(ctx context.Context, r
 		return nil, errors.New("parameter graphName cannot be empty")
 	}
 	urlPath = strings.ReplaceAll(urlPath, "{graphName}", url.PathEscape(graphName))
-	req, err := runtime.NewRequest(ctx, http.MethodGet, runtime.JoinPaths(client.host, urlPath))
+	req, err := runtime.NewRequest(ctx, http.MethodGet, runtime.JoinPaths(client.internal.Endpoint(), urlPath))
 	if err != nil {
 		return nil, err
 	}
 	reqQP := req.Raw().URL.Query()
-	reqQP.Set("api-version", "2022-08-15-preview")
+	reqQP.Set("api-version", "2023-03-15-preview")
 	req.Raw().URL.RawQuery = reqQP.Encode()
 	req.Raw().Header["Accept"] = []string{"application/json"}
 	return req, nil
@@ -253,11 +247,12 @@ func (client *GraphResourcesClient) getGraphHandleResponse(resp *http.Response) 
 }
 
 // NewListGraphsPager - Lists the graphs under an existing Azure Cosmos DB database account.
-// Generated from API version 2022-08-15-preview
-// resourceGroupName - The name of the resource group. The name is case insensitive.
-// accountName - Cosmos DB database account name.
-// options - GraphResourcesClientListGraphsOptions contains the optional parameters for the GraphResourcesClient.ListGraphs
-// method.
+//
+// Generated from API version 2023-03-15-preview
+//   - resourceGroupName - The name of the resource group. The name is case insensitive.
+//   - accountName - Cosmos DB database account name.
+//   - options - GraphResourcesClientListGraphsOptions contains the optional parameters for the GraphResourcesClient.NewListGraphsPager
+//     method.
 func (client *GraphResourcesClient) NewListGraphsPager(resourceGroupName string, accountName string, options *GraphResourcesClientListGraphsOptions) *runtime.Pager[GraphResourcesClientListGraphsResponse] {
 	return runtime.NewPager(runtime.PagingHandler[GraphResourcesClientListGraphsResponse]{
 		More: func(page GraphResourcesClientListGraphsResponse) bool {
@@ -268,7 +263,7 @@ func (client *GraphResourcesClient) NewListGraphsPager(resourceGroupName string,
 			if err != nil {
 				return GraphResourcesClientListGraphsResponse{}, err
 			}
-			resp, err := client.pl.Do(req)
+			resp, err := client.internal.Pipeline().Do(req)
 			if err != nil {
 				return GraphResourcesClientListGraphsResponse{}, err
 			}
@@ -295,12 +290,12 @@ func (client *GraphResourcesClient) listGraphsCreateRequest(ctx context.Context,
 		return nil, errors.New("parameter accountName cannot be empty")
 	}
 	urlPath = strings.ReplaceAll(urlPath, "{accountName}", url.PathEscape(accountName))
-	req, err := runtime.NewRequest(ctx, http.MethodGet, runtime.JoinPaths(client.host, urlPath))
+	req, err := runtime.NewRequest(ctx, http.MethodGet, runtime.JoinPaths(client.internal.Endpoint(), urlPath))
 	if err != nil {
 		return nil, err
 	}
 	reqQP := req.Raw().URL.Query()
-	reqQP.Set("api-version", "2022-08-15-preview")
+	reqQP.Set("api-version", "2023-03-15-preview")
 	req.Raw().URL.RawQuery = reqQP.Encode()
 	req.Raw().Header["Accept"] = []string{"application/json"}
 	return req, nil

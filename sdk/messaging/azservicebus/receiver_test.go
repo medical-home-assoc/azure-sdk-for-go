@@ -6,15 +6,18 @@ package azservicebus
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus/admin"
-	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus/internal/go-amqp"
+	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus/internal/sas"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus/internal/test"
+	"github.com/Azure/go-amqp"
 	"github.com/stretchr/testify/require"
 )
 
@@ -34,6 +37,8 @@ func TestReceiverCancel(t *testing.T) {
 }
 
 func TestReceiverSendFiveReceiveFive(t *testing.T) {
+	getLogsFn := test.CaptureLogsForTest(false)
+
 	serviceBusClient, cleanup, queueName := setupLiveTest(t, nil)
 	defer cleanup()
 
@@ -60,6 +65,21 @@ func TestReceiverSendFiveReceiveFive(t *testing.T) {
 
 		require.NoError(t, receiver.CompleteMessage(context.Background(), messages[i], nil))
 	}
+
+	logs := getLogsFn()
+	checkForTokenRefresh(t, logs, queueName)
+}
+
+// checkForTokenRefresh just makes sure that background token refresh has been started
+// and that we haven't somehow fallen into the trap of marking all tokens are expired.
+func checkForTokenRefresh(t *testing.T, logs []string, queueName string) {
+	require.NotContains(t, logs, backgroundRenewalDisabledMsg)
+	for _, log := range logs {
+		if strings.HasPrefix(log, fmt.Sprintf("[azsb.Auth] (%s) next refresh in ", queueName)) {
+			return
+		}
+	}
+	require.Fail(t, "No token negotiation log lines")
 }
 
 func TestReceiverSendFiveReceiveFive_Subscription(t *testing.T) {
@@ -535,7 +555,7 @@ func TestReceiver_RenewMessageLock(t *testing.T) {
 		messages[0].LockToken[i] = 0
 	}
 
-	endCaptureFn := test.CaptureLogsForTest()
+	endCaptureFn := test.CaptureLogsForTest(false)
 	defer endCaptureFn()
 	expectedLockBadError := receiver.RenewMessageLock(context.Background(), messages[0], nil)
 
@@ -549,8 +569,11 @@ func TestReceiver_RenewMessageLock(t *testing.T) {
 	logMessages := endCaptureFn()
 
 	failedOnFirstTry := false
+
+	re := regexp.MustCompile(`^\[azsb.Receiver\] \[c:1, l:1, r:name:[^\]]+\] \(renewMessageLock\) Retry attempt 0 returned non-retryable error`)
+
 	for _, msg := range logMessages {
-		if strings.HasPrefix(msg, "[azsb.Receiver] (renewMessageLock) Retry attempt 0 returned non-retryable error") {
+		if re.MatchString(msg) {
 			failedOnFirstTry = true
 		}
 	}
@@ -581,13 +604,13 @@ func TestReceiverAMQPDataTypes(t *testing.T) {
 
 	require.NoError(t, sender.SendMessage(context.Background(), &Message{
 		Body: []byte("hello, this is the body"),
-		ApplicationProperties: map[string]interface{}{
+		ApplicationProperties: map[string]any{
 			// Some primitive types are missing - it's a bit unclear what the right representation of this would be in Go:
 			// - TypeCodeDecimal32
 			// - TypeCodeDecimal64
 			// - TypeCodeDecimal128
 			// - TypeCodeChar  (although note below that a 'character' does work, although it's not a TypecodeChar value)
-			// https://github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus/internal/go-amqp/blob/e0c6c63fb01e6642686ee4f8e7412da042bf35dd/internal/encoding/decode.go#L568
+			// https://github.com/Azure/go-amqp/blob/e0c6c63fb01e6642686ee4f8e7412da042bf35dd/internal/encoding/decode.go#L568
 			"timestamp": expectedTime,
 
 			"byte":   byte(128),
@@ -618,7 +641,7 @@ func TestReceiverAMQPDataTypes(t *testing.T) {
 
 	actualProps := messages[0].ApplicationProperties
 
-	require.Equal(t, map[string]interface{}{
+	require.Equal(t, map[string]any{
 		"timestamp": expectedTime,
 
 		"byte":   byte(128),
@@ -765,6 +788,157 @@ func TestReceiverMessageLockExpires(t *testing.T) {
 	var asSBError *Error
 	require.ErrorAs(t, err, &asSBError)
 	require.Equal(t, CodeLockLost, asSBError.Code)
+}
+
+func TestReceiverUnauthorizedCreds(t *testing.T) {
+	allPowerfulCS := test.GetConnectionString(t)
+	queueName := "testqueue"
+
+	t.Run("ListenOnly with Sender", func(t *testing.T) {
+		cs := test.GetConnectionStringListenOnly(t)
+
+		client, err := NewClientFromConnectionString(cs, nil)
+		require.NoError(t, err)
+
+		defer test.RequireClose(t, client)
+
+		sender, err := client.NewSender(queueName, nil)
+		require.NoError(t, err)
+
+		err = sender.SendMessage(context.Background(), &Message{
+			Body: []byte("hello world"),
+		}, nil)
+
+		var sbErr *Error
+		require.ErrorAs(t, err, &sbErr)
+		require.Equal(t, CodeUnauthorizedAccess, sbErr.Code)
+		require.Contains(t, err.Error(), "Description: Unauthorized access. 'Send' claim(s) are required to perform this operation")
+	})
+
+	t.Run("SenderOnly with Receiver", func(t *testing.T) {
+		cs := test.GetConnectionStringSendOnly(t)
+
+		client, err := NewClientFromConnectionString(cs, nil)
+		require.NoError(t, err)
+
+		defer test.RequireClose(t, client)
+
+		receiver, err := client.NewReceiverForQueue(queueName, nil)
+		require.NoError(t, err)
+
+		messages, err := receiver.ReceiveMessages(context.Background(), 1, nil)
+		require.Empty(t, messages)
+
+		var sbErr *Error
+		require.ErrorAs(t, err, &sbErr)
+		require.Equal(t, CodeUnauthorizedAccess, sbErr.Code)
+		require.Contains(t, err.Error(), "Description: Unauthorized access. 'Listen' claim(s) are required to perform this operation")
+	})
+
+	t.Run("Expired SAS", func(t *testing.T) {
+		expiredCS, err := sas.CreateConnectionStringWithSASUsingExpiry(allPowerfulCS, time.Now().Add(-10*time.Minute))
+		require.NoError(t, err)
+
+		client, err := NewClientFromConnectionString(expiredCS, nil)
+		require.NoError(t, err)
+
+		defer test.RequireClose(t, client)
+
+		sender, err := client.NewSender(queueName, nil)
+		require.NoError(t, err)
+
+		err = sender.SendMessage(context.Background(), &Message{
+			Body: []byte("hello world"),
+		}, nil)
+
+		var sbErr *Error
+		require.ErrorAs(t, err, &sbErr)
+		require.Equal(t, CodeUnauthorizedAccess, sbErr.Code)
+		require.Contains(t, err.Error(), "rpc: failed, status code 401 and description: ExpiredToken: The token is expired. Expiration time:")
+
+		receiver, err := client.NewReceiverForQueue(queueName, nil)
+		require.NoError(t, err)
+
+		messages, err := receiver.ReceiveMessages(context.Background(), 1, nil)
+		require.Empty(t, messages)
+
+		sbErr = nil
+		require.ErrorAs(t, err, &sbErr)
+		require.Equal(t, CodeUnauthorizedAccess, sbErr.Code)
+		require.Contains(t, err.Error(), "rpc: failed, status code 401 and description: ExpiredToken: The token is expired. Expiration time:")
+	})
+
+	t.Run("invalid identity creds", func(t *testing.T) {
+		identityVars := test.GetIdentityVars(t)
+		if identityVars == nil {
+			return
+		}
+
+		cliCred, err := azidentity.NewClientSecretCredential(identityVars.TenantID, identityVars.ClientID, "bogus-client-secret", nil)
+		require.NoError(t, err)
+
+		client, err := NewClient(identityVars.Endpoint, cliCred, nil)
+		require.NoError(t, err)
+
+		defer test.RequireClose(t, client)
+
+		receiver, err := client.NewReceiverForQueue(queueName, nil)
+		require.NoError(t, err)
+
+		messages, err := receiver.ReceiveMessages(context.Background(), 1, nil)
+		var authFailedErr *azidentity.AuthenticationFailedError
+		require.ErrorAs(t, err, &authFailedErr)
+		require.Empty(t, messages)
+	})
+}
+
+func TestReceiveAndSendAndReceive(t *testing.T) {
+	serviceBusClient, cleanup, queueName := setupLiveTest(t, nil)
+	defer cleanup()
+
+	sender, err := serviceBusClient.NewSender(queueName, nil)
+	require.NoError(t, err)
+	defer sender.Close(context.Background())
+
+	scheduledEnqueuedTime := time.Now()
+
+	err = sender.SendMessage(context.Background(), &Message{
+		Body: []byte("body text"),
+		ApplicationProperties: map[string]any{
+			"hello": "world",
+		},
+		ContentType:          to.Ptr("application/text"),
+		CorrelationID:        to.Ptr("correlation ID"),
+		MessageID:            to.Ptr("message id"),
+		PartitionKey:         to.Ptr("session id"),
+		ReplyTo:              to.Ptr("reply to"),
+		ReplyToSessionID:     to.Ptr("reply to session id"),
+		ScheduledEnqueueTime: &scheduledEnqueuedTime,
+		SessionID:            to.Ptr("session id"),
+		Subject:              to.Ptr("subject"),
+		TimeToLive:           to.Ptr(time.Minute),
+		To:                   to.Ptr("to"),
+	}, nil)
+	require.NoError(t, err)
+
+	receiver, err := serviceBusClient.NewReceiverForQueue(queueName, &ReceiverOptions{
+		ReceiveMode: ReceiveModeReceiveAndDelete,
+	})
+	require.NoError(t, err)
+
+	msgs, err := receiver.ReceiveMessages(context.Background(), 1, nil)
+	require.NoError(t, err)
+	require.Equal(t, "body text", string(msgs[0].Body))
+
+	// re-send
+	err = sender.SendMessage(context.Background(), msgs[0].Message(), nil)
+	require.NoError(t, err)
+
+	// re-receive
+	rereceivedMsgs, err := receiver.ReceiveMessages(context.Background(), 1, nil)
+	require.NoError(t, err)
+
+	require.Equal(t, msgs[0].Message(), rereceivedMsgs[0].Message(), "all sendable fields are preserved when resending")
 }
 
 type receivedMessageSlice []*ReceivedMessage

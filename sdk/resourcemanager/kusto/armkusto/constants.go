@@ -11,7 +11,7 @@ package armkusto
 
 const (
 	moduleName    = "armkusto"
-	moduleVersion = "v1.1.0"
+	moduleVersion = "v2.0.0"
 )
 
 // AzureSKUName - SKU name.
@@ -75,6 +75,8 @@ const (
 	AzureSKUNameStandardL16S          AzureSKUName = "Standard_L16s"
 	AzureSKUNameStandardL16SV2        AzureSKUName = "Standard_L16s_v2"
 	AzureSKUNameStandardL16SV3        AzureSKUName = "Standard_L16s_v3"
+	AzureSKUNameStandardL32AsV3       AzureSKUName = "Standard_L32as_v3"
+	AzureSKUNameStandardL32SV3        AzureSKUName = "Standard_L32s_v3"
 	AzureSKUNameStandardL4S           AzureSKUName = "Standard_L4s"
 	AzureSKUNameStandardL8AsV3        AzureSKUName = "Standard_L8as_v3"
 	AzureSKUNameStandardL8S           AzureSKUName = "Standard_L8s"
@@ -142,6 +144,8 @@ func PossibleAzureSKUNameValues() []AzureSKUName {
 		AzureSKUNameStandardL16S,
 		AzureSKUNameStandardL16SV2,
 		AzureSKUNameStandardL16SV3,
+		AzureSKUNameStandardL32AsV3,
+		AzureSKUNameStandardL32SV3,
 		AzureSKUNameStandardL4S,
 		AzureSKUNameStandardL8AsV3,
 		AzureSKUNameStandardL8S,
@@ -288,6 +292,7 @@ func PossibleCreatedByTypeValues() []CreatedByType {
 type DataConnectionKind string
 
 const (
+	DataConnectionKindCosmosDb  DataConnectionKind = "CosmosDb"
 	DataConnectionKindEventGrid DataConnectionKind = "EventGrid"
 	DataConnectionKindEventHub  DataConnectionKind = "EventHub"
 	DataConnectionKindIotHub    DataConnectionKind = "IotHub"
@@ -296,6 +301,7 @@ const (
 // PossibleDataConnectionKindValues returns the possible values for the DataConnectionKind const type.
 func PossibleDataConnectionKindValues() []DataConnectionKind {
 	return []DataConnectionKind{
+		DataConnectionKindCosmosDb,
 		DataConnectionKindEventGrid,
 		DataConnectionKindEventHub,
 		DataConnectionKindIotHub,
@@ -583,6 +589,24 @@ func PossibleKindValues() []Kind {
 	}
 }
 
+// LanguageExtensionImageName - Language extension image name.
+type LanguageExtensionImageName string
+
+const (
+	LanguageExtensionImageNamePython3108 LanguageExtensionImageName = "Python3_10_8"
+	LanguageExtensionImageNamePython365  LanguageExtensionImageName = "Python3_6_5"
+	LanguageExtensionImageNameR          LanguageExtensionImageName = "R"
+)
+
+// PossibleLanguageExtensionImageNameValues returns the possible values for the LanguageExtensionImageName const type.
+func PossibleLanguageExtensionImageNameValues() []LanguageExtensionImageName {
+	return []LanguageExtensionImageName{
+		LanguageExtensionImageNamePython3108,
+		LanguageExtensionImageNamePython365,
+		LanguageExtensionImageNameR,
+	}
+}
+
 // LanguageExtensionName - Language extension that can run within KQL query.
 type LanguageExtensionName string
 
@@ -596,6 +620,22 @@ func PossibleLanguageExtensionNameValues() []LanguageExtensionName {
 	return []LanguageExtensionName{
 		LanguageExtensionNamePYTHON,
 		LanguageExtensionNameR,
+	}
+}
+
+// MigrationClusterRole - The role of the cluster in the migration process.
+type MigrationClusterRole string
+
+const (
+	MigrationClusterRoleDestination MigrationClusterRole = "Destination"
+	MigrationClusterRoleSource      MigrationClusterRole = "Source"
+)
+
+// PossibleMigrationClusterRoleValues returns the possible values for the MigrationClusterRole const type.
+func PossibleMigrationClusterRoleValues() []MigrationClusterRole {
+	return []MigrationClusterRole{
+		MigrationClusterRoleDestination,
+		MigrationClusterRoleSource,
 	}
 }
 
@@ -639,6 +679,7 @@ func PossiblePrincipalsModificationKindValues() []PrincipalsModificationKind {
 type ProvisioningState string
 
 const (
+	ProvisioningStateCanceled  ProvisioningState = "Canceled"
 	ProvisioningStateCreating  ProvisioningState = "Creating"
 	ProvisioningStateDeleting  ProvisioningState = "Deleting"
 	ProvisioningStateFailed    ProvisioningState = "Failed"
@@ -650,6 +691,7 @@ const (
 // PossibleProvisioningStateValues returns the possible values for the ProvisioningState const type.
 func PossibleProvisioningStateValues() []ProvisioningState {
 	return []ProvisioningState{
+		ProvisioningStateCanceled,
 		ProvisioningStateCreating,
 		ProvisioningStateDeleting,
 		ProvisioningStateFailed,
@@ -715,6 +757,7 @@ const (
 	StateCreating    State = "Creating"
 	StateDeleted     State = "Deleted"
 	StateDeleting    State = "Deleting"
+	StateMigrated    State = "Migrated"
 	StateRunning     State = "Running"
 	StateStarting    State = "Starting"
 	StateStopped     State = "Stopped"
@@ -729,6 +772,7 @@ func PossibleStateValues() []State {
 		StateCreating,
 		StateDeleted,
 		StateDeleting,
+		StateMigrated,
 		StateRunning,
 		StateStarting,
 		StateStopped,

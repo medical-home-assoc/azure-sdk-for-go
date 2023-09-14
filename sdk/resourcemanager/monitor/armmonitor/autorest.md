@@ -5,8 +5,12 @@
 ``` yaml
 azure-arm: true
 require:
-- https://github.com/Azure/azure-rest-api-specs/blob/68847d6ae901f0cb2efa62ae2c523ad8cf5c2ea3/specification/monitor/resource-manager/readme.md
-- https://github.com/Azure/azure-rest-api-specs/blob/68847d6ae901f0cb2efa62ae2c523ad8cf5c2ea3/specification/monitor/resource-manager/readme.go.md
+- https://github.com/Azure/azure-rest-api-specs/blob/969fd0c2634fbcc1975d7abe3749330a5145a97c/specification/monitor/resource-manager/readme.md
+- https://github.com/Azure/azure-rest-api-specs/blob/969fd0c2634fbcc1975d7abe3749330a5145a97c/specification/monitor/resource-manager/readme.go.md
 license-header: MICROSOFT_MIT_NO_VERSION
-module-version: 0.8.0
+module: github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/monitor/armmonitor
+module-version: 0.10.1
+azcore-version: 1.8.0-beta.1
+generate-fakes: true
+inject-spans: true
 ```

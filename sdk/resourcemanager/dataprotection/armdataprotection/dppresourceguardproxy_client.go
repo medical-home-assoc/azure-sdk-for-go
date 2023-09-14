@@ -14,8 +14,6 @@ import (
 	"errors"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
-	armruntime "github.com/Azure/azure-sdk-for-go/sdk/azcore/arm/runtime"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"net/http"
@@ -26,48 +24,102 @@ import (
 // DppResourceGuardProxyClient contains the methods for the DppResourceGuardProxy group.
 // Don't use this type directly, use NewDppResourceGuardProxyClient() instead.
 type DppResourceGuardProxyClient struct {
-	host           string
+	internal       *arm.Client
 	subscriptionID string
-	pl             runtime.Pipeline
 }
 
 // NewDppResourceGuardProxyClient creates a new instance of DppResourceGuardProxyClient with the specified values.
-// subscriptionID - The subscription Id.
-// credential - used to authorize requests. Usually a credential from azidentity.
-// options - pass nil to accept the default values.
+//   - subscriptionID - The ID of the target subscription. The value must be an UUID.
+//   - credential - used to authorize requests. Usually a credential from azidentity.
+//   - options - pass nil to accept the default values.
 func NewDppResourceGuardProxyClient(subscriptionID string, credential azcore.TokenCredential, options *arm.ClientOptions) (*DppResourceGuardProxyClient, error) {
-	if options == nil {
-		options = &arm.ClientOptions{}
-	}
-	ep := cloud.AzurePublic.Services[cloud.ResourceManager].Endpoint
-	if c, ok := options.Cloud.Services[cloud.ResourceManager]; ok {
-		ep = c.Endpoint
-	}
-	pl, err := armruntime.NewPipeline(moduleName, moduleVersion, credential, runtime.PipelineOptions{}, options)
+	cl, err := arm.NewClient(moduleName+".DppResourceGuardProxyClient", moduleVersion, credential, options)
 	if err != nil {
 		return nil, err
 	}
 	client := &DppResourceGuardProxyClient{
 		subscriptionID: subscriptionID,
-		host:           ep,
-		pl:             pl,
+		internal:       cl,
 	}
 	return client, nil
 }
 
-// Delete -
+// CreateOrUpdate - Creates or Updates a ResourceGuardProxy
 // If the operation fails it returns an *azcore.ResponseError type.
-// Generated from API version 2022-11-01-preview
-// resourceGroupName - The name of the resource group where the backup vault is present.
-// vaultName - The name of the backup vault.
-// options - DppResourceGuardProxyClientDeleteOptions contains the optional parameters for the DppResourceGuardProxyClient.Delete
-// method.
+//
+// Generated from API version 2023-05-01
+//   - resourceGroupName - The name of the resource group. The name is case insensitive.
+//   - vaultName - The name of the backup vault.
+//   - resourceGuardProxyName - name of the resource guard proxy
+//   - parameters - Request body for operation
+//   - options - DppResourceGuardProxyClientCreateOrUpdateOptions contains the optional parameters for the DppResourceGuardProxyClient.CreateOrUpdate
+//     method.
+func (client *DppResourceGuardProxyClient) CreateOrUpdate(ctx context.Context, resourceGroupName string, vaultName string, resourceGuardProxyName string, parameters ResourceGuardProxyBaseResource, options *DppResourceGuardProxyClientCreateOrUpdateOptions) (DppResourceGuardProxyClientCreateOrUpdateResponse, error) {
+	req, err := client.createOrUpdateCreateRequest(ctx, resourceGroupName, vaultName, resourceGuardProxyName, parameters, options)
+	if err != nil {
+		return DppResourceGuardProxyClientCreateOrUpdateResponse{}, err
+	}
+	resp, err := client.internal.Pipeline().Do(req)
+	if err != nil {
+		return DppResourceGuardProxyClientCreateOrUpdateResponse{}, err
+	}
+	if !runtime.HasStatusCode(resp, http.StatusOK) {
+		return DppResourceGuardProxyClientCreateOrUpdateResponse{}, runtime.NewResponseError(resp)
+	}
+	return client.createOrUpdateHandleResponse(resp)
+}
+
+// createOrUpdateCreateRequest creates the CreateOrUpdate request.
+func (client *DppResourceGuardProxyClient) createOrUpdateCreateRequest(ctx context.Context, resourceGroupName string, vaultName string, resourceGuardProxyName string, parameters ResourceGuardProxyBaseResource, options *DppResourceGuardProxyClientCreateOrUpdateOptions) (*policy.Request, error) {
+	urlPath := "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataProtection/backupVaults/{vaultName}/backupResourceGuardProxies/{resourceGuardProxyName}"
+	urlPath = strings.ReplaceAll(urlPath, "{subscriptionId}", url.PathEscape(client.subscriptionID))
+	if resourceGroupName == "" {
+		return nil, errors.New("parameter resourceGroupName cannot be empty")
+	}
+	urlPath = strings.ReplaceAll(urlPath, "{resourceGroupName}", url.PathEscape(resourceGroupName))
+	if vaultName == "" {
+		return nil, errors.New("parameter vaultName cannot be empty")
+	}
+	urlPath = strings.ReplaceAll(urlPath, "{vaultName}", url.PathEscape(vaultName))
+	if resourceGuardProxyName == "" {
+		return nil, errors.New("parameter resourceGuardProxyName cannot be empty")
+	}
+	urlPath = strings.ReplaceAll(urlPath, "{resourceGuardProxyName}", url.PathEscape(resourceGuardProxyName))
+	req, err := runtime.NewRequest(ctx, http.MethodPut, runtime.JoinPaths(client.internal.Endpoint(), urlPath))
+	if err != nil {
+		return nil, err
+	}
+	reqQP := req.Raw().URL.Query()
+	reqQP.Set("api-version", "2023-05-01")
+	req.Raw().URL.RawQuery = reqQP.Encode()
+	req.Raw().Header["Accept"] = []string{"application/json"}
+	return req, runtime.MarshalAsJSON(req, parameters)
+}
+
+// createOrUpdateHandleResponse handles the CreateOrUpdate response.
+func (client *DppResourceGuardProxyClient) createOrUpdateHandleResponse(resp *http.Response) (DppResourceGuardProxyClientCreateOrUpdateResponse, error) {
+	result := DppResourceGuardProxyClientCreateOrUpdateResponse{}
+	if err := runtime.UnmarshalAsJSON(resp, &result.ResourceGuardProxyBaseResource); err != nil {
+		return DppResourceGuardProxyClientCreateOrUpdateResponse{}, err
+	}
+	return result, nil
+}
+
+// Delete - Deletes the ResourceGuardProxy
+// If the operation fails it returns an *azcore.ResponseError type.
+//
+// Generated from API version 2023-05-01
+//   - resourceGroupName - The name of the resource group. The name is case insensitive.
+//   - vaultName - The name of the backup vault.
+//   - resourceGuardProxyName - name of the resource guard proxy
+//   - options - DppResourceGuardProxyClientDeleteOptions contains the optional parameters for the DppResourceGuardProxyClient.Delete
+//     method.
 func (client *DppResourceGuardProxyClient) Delete(ctx context.Context, resourceGroupName string, vaultName string, resourceGuardProxyName string, options *DppResourceGuardProxyClientDeleteOptions) (DppResourceGuardProxyClientDeleteResponse, error) {
 	req, err := client.deleteCreateRequest(ctx, resourceGroupName, vaultName, resourceGuardProxyName, options)
 	if err != nil {
 		return DppResourceGuardProxyClientDeleteResponse{}, err
 	}
-	resp, err := client.pl.Do(req)
+	resp, err := client.internal.Pipeline().Do(req)
 	if err != nil {
 		return DppResourceGuardProxyClientDeleteResponse{}, err
 	}
@@ -80,9 +132,6 @@ func (client *DppResourceGuardProxyClient) Delete(ctx context.Context, resourceG
 // deleteCreateRequest creates the Delete request.
 func (client *DppResourceGuardProxyClient) deleteCreateRequest(ctx context.Context, resourceGroupName string, vaultName string, resourceGuardProxyName string, options *DppResourceGuardProxyClientDeleteOptions) (*policy.Request, error) {
 	urlPath := "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataProtection/backupVaults/{vaultName}/backupResourceGuardProxies/{resourceGuardProxyName}"
-	if client.subscriptionID == "" {
-		return nil, errors.New("parameter client.subscriptionID cannot be empty")
-	}
 	urlPath = strings.ReplaceAll(urlPath, "{subscriptionId}", url.PathEscape(client.subscriptionID))
 	if resourceGroupName == "" {
 		return nil, errors.New("parameter resourceGroupName cannot be empty")
@@ -96,30 +145,32 @@ func (client *DppResourceGuardProxyClient) deleteCreateRequest(ctx context.Conte
 		return nil, errors.New("parameter resourceGuardProxyName cannot be empty")
 	}
 	urlPath = strings.ReplaceAll(urlPath, "{resourceGuardProxyName}", url.PathEscape(resourceGuardProxyName))
-	req, err := runtime.NewRequest(ctx, http.MethodDelete, runtime.JoinPaths(client.host, urlPath))
+	req, err := runtime.NewRequest(ctx, http.MethodDelete, runtime.JoinPaths(client.internal.Endpoint(), urlPath))
 	if err != nil {
 		return nil, err
 	}
 	reqQP := req.Raw().URL.Query()
-	reqQP.Set("api-version", "2022-11-01-preview")
+	reqQP.Set("api-version", "2023-05-01")
 	req.Raw().URL.RawQuery = reqQP.Encode()
 	req.Raw().Header["Accept"] = []string{"application/json"}
 	return req, nil
 }
 
-// Get -
+// Get - Returns the ResourceGuardProxy object associated with the vault, and that matches the name in the request
 // If the operation fails it returns an *azcore.ResponseError type.
-// Generated from API version 2022-11-01-preview
-// resourceGroupName - The name of the resource group where the backup vault is present.
-// vaultName - The name of the backup vault.
-// options - DppResourceGuardProxyClientGetOptions contains the optional parameters for the DppResourceGuardProxyClient.Get
-// method.
+//
+// Generated from API version 2023-05-01
+//   - resourceGroupName - The name of the resource group. The name is case insensitive.
+//   - vaultName - The name of the backup vault.
+//   - resourceGuardProxyName - name of the resource guard proxy
+//   - options - DppResourceGuardProxyClientGetOptions contains the optional parameters for the DppResourceGuardProxyClient.Get
+//     method.
 func (client *DppResourceGuardProxyClient) Get(ctx context.Context, resourceGroupName string, vaultName string, resourceGuardProxyName string, options *DppResourceGuardProxyClientGetOptions) (DppResourceGuardProxyClientGetResponse, error) {
 	req, err := client.getCreateRequest(ctx, resourceGroupName, vaultName, resourceGuardProxyName, options)
 	if err != nil {
 		return DppResourceGuardProxyClientGetResponse{}, err
 	}
-	resp, err := client.pl.Do(req)
+	resp, err := client.internal.Pipeline().Do(req)
 	if err != nil {
 		return DppResourceGuardProxyClientGetResponse{}, err
 	}
@@ -132,9 +183,6 @@ func (client *DppResourceGuardProxyClient) Get(ctx context.Context, resourceGrou
 // getCreateRequest creates the Get request.
 func (client *DppResourceGuardProxyClient) getCreateRequest(ctx context.Context, resourceGroupName string, vaultName string, resourceGuardProxyName string, options *DppResourceGuardProxyClientGetOptions) (*policy.Request, error) {
 	urlPath := "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataProtection/backupVaults/{vaultName}/backupResourceGuardProxies/{resourceGuardProxyName}"
-	if client.subscriptionID == "" {
-		return nil, errors.New("parameter client.subscriptionID cannot be empty")
-	}
 	urlPath = strings.ReplaceAll(urlPath, "{subscriptionId}", url.PathEscape(client.subscriptionID))
 	if resourceGroupName == "" {
 		return nil, errors.New("parameter resourceGroupName cannot be empty")
@@ -148,12 +196,12 @@ func (client *DppResourceGuardProxyClient) getCreateRequest(ctx context.Context,
 		return nil, errors.New("parameter resourceGuardProxyName cannot be empty")
 	}
 	urlPath = strings.ReplaceAll(urlPath, "{resourceGuardProxyName}", url.PathEscape(resourceGuardProxyName))
-	req, err := runtime.NewRequest(ctx, http.MethodGet, runtime.JoinPaths(client.host, urlPath))
+	req, err := runtime.NewRequest(ctx, http.MethodGet, runtime.JoinPaths(client.internal.Endpoint(), urlPath))
 	if err != nil {
 		return nil, err
 	}
 	reqQP := req.Raw().URL.Query()
-	reqQP.Set("api-version", "2022-11-01-preview")
+	reqQP.Set("api-version", "2023-05-01")
 	req.Raw().URL.RawQuery = reqQP.Encode()
 	req.Raw().Header["Accept"] = []string{"application/json"}
 	return req, nil
@@ -168,10 +216,13 @@ func (client *DppResourceGuardProxyClient) getHandleResponse(resp *http.Response
 	return result, nil
 }
 
-// resourceGroupName - The name of the resource group where the backup vault is present.
-// vaultName - The name of the backup vault.
-// options - DppResourceGuardProxyClientListOptions contains the optional parameters for the DppResourceGuardProxyClient.List
-// method.
+// NewListPager - Returns the list of ResourceGuardProxies associated with the vault
+//
+// Generated from API version 2023-05-01
+//   - resourceGroupName - The name of the resource group. The name is case insensitive.
+//   - vaultName - The name of the backup vault.
+//   - options - DppResourceGuardProxyClientListOptions contains the optional parameters for the DppResourceGuardProxyClient.NewListPager
+//     method.
 func (client *DppResourceGuardProxyClient) NewListPager(resourceGroupName string, vaultName string, options *DppResourceGuardProxyClientListOptions) *runtime.Pager[DppResourceGuardProxyClientListResponse] {
 	return runtime.NewPager(runtime.PagingHandler[DppResourceGuardProxyClientListResponse]{
 		More: func(page DppResourceGuardProxyClientListResponse) bool {
@@ -188,7 +239,7 @@ func (client *DppResourceGuardProxyClient) NewListPager(resourceGroupName string
 			if err != nil {
 				return DppResourceGuardProxyClientListResponse{}, err
 			}
-			resp, err := client.pl.Do(req)
+			resp, err := client.internal.Pipeline().Do(req)
 			if err != nil {
 				return DppResourceGuardProxyClientListResponse{}, err
 			}
@@ -203,9 +254,6 @@ func (client *DppResourceGuardProxyClient) NewListPager(resourceGroupName string
 // listCreateRequest creates the List request.
 func (client *DppResourceGuardProxyClient) listCreateRequest(ctx context.Context, resourceGroupName string, vaultName string, options *DppResourceGuardProxyClientListOptions) (*policy.Request, error) {
 	urlPath := "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataProtection/backupVaults/{vaultName}/backupResourceGuardProxies"
-	if client.subscriptionID == "" {
-		return nil, errors.New("parameter client.subscriptionID cannot be empty")
-	}
 	urlPath = strings.ReplaceAll(urlPath, "{subscriptionId}", url.PathEscape(client.subscriptionID))
 	if resourceGroupName == "" {
 		return nil, errors.New("parameter resourceGroupName cannot be empty")
@@ -215,12 +263,12 @@ func (client *DppResourceGuardProxyClient) listCreateRequest(ctx context.Context
 		return nil, errors.New("parameter vaultName cannot be empty")
 	}
 	urlPath = strings.ReplaceAll(urlPath, "{vaultName}", url.PathEscape(vaultName))
-	req, err := runtime.NewRequest(ctx, http.MethodGet, runtime.JoinPaths(client.host, urlPath))
+	req, err := runtime.NewRequest(ctx, http.MethodGet, runtime.JoinPaths(client.internal.Endpoint(), urlPath))
 	if err != nil {
 		return nil, err
 	}
 	reqQP := req.Raw().URL.Query()
-	reqQP.Set("api-version", "2022-11-01-preview")
+	reqQP.Set("api-version", "2023-05-01")
 	req.Raw().URL.RawQuery = reqQP.Encode()
 	req.Raw().Header["Accept"] = []string{"application/json"}
 	return req, nil
@@ -235,82 +283,22 @@ func (client *DppResourceGuardProxyClient) listHandleResponse(resp *http.Respons
 	return result, nil
 }
 
-// Put -
+// UnlockDelete - UnlockDelete call for ResourceGuardProxy, executed before one can delete it
 // If the operation fails it returns an *azcore.ResponseError type.
-// Generated from API version 2022-11-01-preview
-// resourceGroupName - The name of the resource group where the backup vault is present.
-// vaultName - The name of the backup vault.
-// parameters - Request body for operation
-// options - DppResourceGuardProxyClientPutOptions contains the optional parameters for the DppResourceGuardProxyClient.Put
-// method.
-func (client *DppResourceGuardProxyClient) Put(ctx context.Context, resourceGroupName string, vaultName string, resourceGuardProxyName string, parameters ResourceGuardProxyBaseResource, options *DppResourceGuardProxyClientPutOptions) (DppResourceGuardProxyClientPutResponse, error) {
-	req, err := client.putCreateRequest(ctx, resourceGroupName, vaultName, resourceGuardProxyName, parameters, options)
-	if err != nil {
-		return DppResourceGuardProxyClientPutResponse{}, err
-	}
-	resp, err := client.pl.Do(req)
-	if err != nil {
-		return DppResourceGuardProxyClientPutResponse{}, err
-	}
-	if !runtime.HasStatusCode(resp, http.StatusOK) {
-		return DppResourceGuardProxyClientPutResponse{}, runtime.NewResponseError(resp)
-	}
-	return client.putHandleResponse(resp)
-}
-
-// putCreateRequest creates the Put request.
-func (client *DppResourceGuardProxyClient) putCreateRequest(ctx context.Context, resourceGroupName string, vaultName string, resourceGuardProxyName string, parameters ResourceGuardProxyBaseResource, options *DppResourceGuardProxyClientPutOptions) (*policy.Request, error) {
-	urlPath := "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataProtection/backupVaults/{vaultName}/backupResourceGuardProxies/{resourceGuardProxyName}"
-	if client.subscriptionID == "" {
-		return nil, errors.New("parameter client.subscriptionID cannot be empty")
-	}
-	urlPath = strings.ReplaceAll(urlPath, "{subscriptionId}", url.PathEscape(client.subscriptionID))
-	if resourceGroupName == "" {
-		return nil, errors.New("parameter resourceGroupName cannot be empty")
-	}
-	urlPath = strings.ReplaceAll(urlPath, "{resourceGroupName}", url.PathEscape(resourceGroupName))
-	if vaultName == "" {
-		return nil, errors.New("parameter vaultName cannot be empty")
-	}
-	urlPath = strings.ReplaceAll(urlPath, "{vaultName}", url.PathEscape(vaultName))
-	if resourceGuardProxyName == "" {
-		return nil, errors.New("parameter resourceGuardProxyName cannot be empty")
-	}
-	urlPath = strings.ReplaceAll(urlPath, "{resourceGuardProxyName}", url.PathEscape(resourceGuardProxyName))
-	req, err := runtime.NewRequest(ctx, http.MethodPut, runtime.JoinPaths(client.host, urlPath))
-	if err != nil {
-		return nil, err
-	}
-	reqQP := req.Raw().URL.Query()
-	reqQP.Set("api-version", "2022-11-01-preview")
-	req.Raw().URL.RawQuery = reqQP.Encode()
-	req.Raw().Header["Accept"] = []string{"application/json"}
-	return req, runtime.MarshalAsJSON(req, parameters)
-}
-
-// putHandleResponse handles the Put response.
-func (client *DppResourceGuardProxyClient) putHandleResponse(resp *http.Response) (DppResourceGuardProxyClientPutResponse, error) {
-	result := DppResourceGuardProxyClientPutResponse{}
-	if err := runtime.UnmarshalAsJSON(resp, &result.ResourceGuardProxyBaseResource); err != nil {
-		return DppResourceGuardProxyClientPutResponse{}, err
-	}
-	return result, nil
-}
-
-// UnlockDelete -
-// If the operation fails it returns an *azcore.ResponseError type.
-// Generated from API version 2022-11-01-preview
-// resourceGroupName - The name of the resource group where the backup vault is present.
-// vaultName - The name of the backup vault.
-// parameters - Request body for operation
-// options - DppResourceGuardProxyClientUnlockDeleteOptions contains the optional parameters for the DppResourceGuardProxyClient.UnlockDelete
-// method.
+//
+// Generated from API version 2023-05-01
+//   - resourceGroupName - The name of the resource group. The name is case insensitive.
+//   - vaultName - The name of the backup vault.
+//   - resourceGuardProxyName - name of the resource guard proxy
+//   - parameters - Request body for operation
+//   - options - DppResourceGuardProxyClientUnlockDeleteOptions contains the optional parameters for the DppResourceGuardProxyClient.UnlockDelete
+//     method.
 func (client *DppResourceGuardProxyClient) UnlockDelete(ctx context.Context, resourceGroupName string, vaultName string, resourceGuardProxyName string, parameters UnlockDeleteRequest, options *DppResourceGuardProxyClientUnlockDeleteOptions) (DppResourceGuardProxyClientUnlockDeleteResponse, error) {
 	req, err := client.unlockDeleteCreateRequest(ctx, resourceGroupName, vaultName, resourceGuardProxyName, parameters, options)
 	if err != nil {
 		return DppResourceGuardProxyClientUnlockDeleteResponse{}, err
 	}
-	resp, err := client.pl.Do(req)
+	resp, err := client.internal.Pipeline().Do(req)
 	if err != nil {
 		return DppResourceGuardProxyClientUnlockDeleteResponse{}, err
 	}
@@ -323,9 +311,6 @@ func (client *DppResourceGuardProxyClient) UnlockDelete(ctx context.Context, res
 // unlockDeleteCreateRequest creates the UnlockDelete request.
 func (client *DppResourceGuardProxyClient) unlockDeleteCreateRequest(ctx context.Context, resourceGroupName string, vaultName string, resourceGuardProxyName string, parameters UnlockDeleteRequest, options *DppResourceGuardProxyClientUnlockDeleteOptions) (*policy.Request, error) {
 	urlPath := "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataProtection/backupVaults/{vaultName}/backupResourceGuardProxies/{resourceGuardProxyName}/unlockDelete"
-	if client.subscriptionID == "" {
-		return nil, errors.New("parameter client.subscriptionID cannot be empty")
-	}
 	urlPath = strings.ReplaceAll(urlPath, "{subscriptionId}", url.PathEscape(client.subscriptionID))
 	if resourceGroupName == "" {
 		return nil, errors.New("parameter resourceGroupName cannot be empty")
@@ -339,12 +324,12 @@ func (client *DppResourceGuardProxyClient) unlockDeleteCreateRequest(ctx context
 		return nil, errors.New("parameter resourceGuardProxyName cannot be empty")
 	}
 	urlPath = strings.ReplaceAll(urlPath, "{resourceGuardProxyName}", url.PathEscape(resourceGuardProxyName))
-	req, err := runtime.NewRequest(ctx, http.MethodPost, runtime.JoinPaths(client.host, urlPath))
+	req, err := runtime.NewRequest(ctx, http.MethodPost, runtime.JoinPaths(client.internal.Endpoint(), urlPath))
 	if err != nil {
 		return nil, err
 	}
 	reqQP := req.Raw().URL.Query()
-	reqQP.Set("api-version", "2022-11-01-preview")
+	reqQP.Set("api-version", "2023-05-01")
 	req.Raw().URL.RawQuery = reqQP.Encode()
 	req.Raw().Header["Accept"] = []string{"application/json"}
 	return req, runtime.MarshalAsJSON(req, parameters)

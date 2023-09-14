@@ -12,14 +12,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/recording"
 )
 
-const secret = "secret"
+const fakeSecret = "secret"
 
 func TestClientSecretCredential_InvalidTenantID(t *testing.T) {
-	cred, err := NewClientSecretCredential(badTenantID, fakeClientID, secret, nil)
+	cred, err := NewClientSecretCredential(badTenantID, fakeClientID, fakeSecret, nil)
 	if err == nil {
 		t.Fatal("Expected an error but received none")
 	}
@@ -29,12 +28,12 @@ func TestClientSecretCredential_InvalidTenantID(t *testing.T) {
 }
 
 func TestClientSecretCredential_GetTokenSuccess(t *testing.T) {
-	cred, err := NewClientSecretCredential(fakeTenantID, fakeClientID, secret, nil)
+	cred, err := NewClientSecretCredential(fakeTenantID, fakeClientID, fakeSecret, nil)
 	if err != nil {
 		t.Fatalf("Unable to create credential. Received: %v", err)
 	}
-	cred.client = fakeConfidentialClient{}
-	_, err = cred.GetToken(context.Background(), policy.TokenRequestOptions{Scopes: []string{liveTestScope}})
+	cred.client.noCAE = fakeConfidentialClient{}
+	_, err = cred.GetToken(context.Background(), testTRO)
 	if err != nil {
 		t.Fatalf("Expected an empty error but received: %v", err)
 	}
@@ -84,7 +83,7 @@ func TestClientSecretCredential_InvalidSecretLive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to construct credential: %v", err)
 	}
-	tk, err := cred.GetToken(context.Background(), policy.TokenRequestOptions{Scopes: []string{liveTestScope}})
+	tk, err := cred.GetToken(context.Background(), testTRO)
 	if !reflect.ValueOf(tk).IsZero() {
 		t.Fatal("expected a zero value AccessToken")
 	}

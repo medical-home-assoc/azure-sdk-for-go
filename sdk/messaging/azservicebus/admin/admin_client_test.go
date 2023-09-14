@@ -558,6 +558,153 @@ func testTopicCreation(t *testing.T, isPremium bool) {
 	}, addSubWithPropsResp.SubscriptionProperties)
 }
 
+func TestAdminClient_TopicAndSubscription_WithFalseFilterDefaultSubscriptionRule(t *testing.T) {
+	adminClient, topicName := createAdminClientWithTestTopic(t)
+
+	defer deleteTopic(t, adminClient, topicName)
+
+	subscriptionName := createTestSubscriptionWithDefaultRule(
+		t,
+		adminClient,
+		topicName,
+		&RuleProperties{Filter: &FalseFilter{}},
+	)
+
+	// Even though a default rule is created on the subscription, the response body does not include it.
+	// which is why we can discard this response and need to fetch the rule explicitly.
+	// (It is also not included when fetching the subscription)
+	defaultRule, err := adminClient.GetRule(context.Background(), topicName, subscriptionName, "$Default", nil)
+	require.NoError(t, err)
+
+	require.Equal(t, "$Default", defaultRule.Name)
+	require.IsType(t, &FalseFilter{}, defaultRule.Filter)
+	require.Nil(t, defaultRule.Action)
+}
+
+func TestAdminClient_TopicAndSubscription_WithCustomFilterDefaultSubscriptionRule(t *testing.T) {
+	adminClient, topicName := createAdminClientWithTestTopic(t)
+
+	defer deleteTopic(t, adminClient, topicName)
+
+	customSqlFilter := &SQLFilter{
+		Expression: "SomeProperty LIKE 'O%'",
+	}
+
+	subscriptionName := createTestSubscriptionWithDefaultRule(
+		t,
+		adminClient,
+		topicName,
+		&RuleProperties{
+			Name:   "TestRule",
+			Filter: customSqlFilter,
+		},
+	)
+
+	defaultRule, err := adminClient.GetRule(context.Background(), topicName, subscriptionName, "TestRule", nil)
+	require.NoError(t, err)
+
+	require.Equal(t, "TestRule", defaultRule.Name)
+	require.Equal(t, customSqlFilter, defaultRule.Filter)
+	require.Nil(t, defaultRule.Action)
+}
+
+func TestAdminClient_TopicAndSubscription_WithActionDefaultSubscriptionRule(t *testing.T) {
+	adminClient, topicName := createAdminClientWithTestTopic(t)
+
+	defer deleteTopic(t, adminClient, topicName)
+
+	ruleAction := &SQLAction{
+		Expression: "SET MessageID=@stringVar",
+		Parameters: map[string]any{
+			"@stringVar": "hello world",
+		},
+	}
+
+	subscriptionName := createTestSubscriptionWithDefaultRule(
+		t,
+		adminClient,
+		topicName,
+		&RuleProperties{
+			Action: ruleAction,
+		},
+	)
+
+	defaultRule, err := adminClient.GetRule(context.Background(), topicName, subscriptionName, "$Default", nil)
+	require.NoError(t, err)
+
+	require.Equal(t, "$Default", defaultRule.Name)
+	require.Equal(t, ruleAction, defaultRule.Action)
+	require.Equal(t, defaultRule.Filter, &TrueFilter{})
+}
+
+func TestAdminClient_TopicAndSubscription_WithActionAndFilterDefaultSubscriptionRule(t *testing.T) {
+	adminClient, topicName := createAdminClientWithTestTopic(t)
+
+	defer deleteTopic(t, adminClient, topicName)
+
+	ruleAction := &SQLAction{
+		Expression: "SET MessageID=@stringVar",
+		Parameters: map[string]any{
+			"@stringVar": "hello world",
+		},
+	}
+
+	ruleFilter := &SQLFilter{
+		Expression: "SomeProperty LIKE 'O%'",
+	}
+
+	subscriptionName := createTestSubscriptionWithDefaultRule(
+		t,
+		adminClient,
+		topicName,
+		&RuleProperties{
+			Action: ruleAction,
+			Filter: ruleFilter,
+		},
+	)
+
+	defaultRule, err := adminClient.GetRule(context.Background(), topicName, subscriptionName, "$Default", nil)
+	require.NoError(t, err)
+
+	require.Equal(t, "$Default", defaultRule.Name)
+	require.EqualValues(t, ruleAction, defaultRule.Action)
+	require.EqualValues(t, ruleFilter, defaultRule.Filter)
+}
+
+func createAdminClientWithTestTopic(t *testing.T) (*Client, string) {
+	adminClient, err := NewClientFromConnectionString(test.GetConnectionString(t), nil)
+	require.NoError(t, err)
+
+	topicName := fmt.Sprintf("topic-%X", time.Now().UnixNano())
+	_, err = adminClient.CreateTopic(context.Background(), topicName, nil)
+	require.NoError(t, err)
+
+	return adminClient, topicName
+}
+
+func createTestSubscriptionWithDefaultRule(t *testing.T, adminClient *Client, topicName string, defaultRule *RuleProperties) string {
+	subscriptionName := fmt.Sprintf("subscription-%X", time.Now().UnixNano())
+
+	_, err := adminClient.CreateSubscription(context.Background(), topicName, subscriptionName, &CreateSubscriptionOptions{
+		Properties: &SubscriptionProperties{
+			LockDuration:                                    to.Ptr("PT3M"),
+			RequiresSession:                                 to.Ptr(false),
+			DefaultMessageTimeToLive:                        to.Ptr("PT7M"),
+			DeadLetteringOnMessageExpiration:                to.Ptr(true),
+			EnableDeadLetteringOnFilterEvaluationExceptions: to.Ptr(false),
+			MaxDeliveryCount:                                to.Ptr(int32(11)),
+			Status:                                          to.Ptr(EntityStatusActive),
+			EnableBatchedOperations:                         to.Ptr(false),
+			AutoDeleteOnIdle:                                to.Ptr("PT11M"),
+			UserMetadata:                                    to.Ptr("user metadata"),
+			DefaultRule:                                     defaultRule,
+		},
+	})
+	require.NoError(t, err)
+
+	return subscriptionName
+}
+
 func TestAdminClient_Forwarding(t *testing.T) {
 	adminClient, err := NewClientFromConnectionString(test.GetConnectionString(t), nil)
 	require.NoError(t, err)
@@ -1086,7 +1233,7 @@ type fakeEM struct {
 	getResponses []string
 }
 
-func (em *fakeEM) Get(ctx context.Context, entityPath string, respObj interface{}) (*http.Response, error) {
+func (em *fakeEM) Get(ctx context.Context, entityPath string, respObj any) (*http.Response, error) {
 	jsonPath := em.getResponses[0]
 	em.getResponses = em.getResponses[1:]
 
@@ -1245,7 +1392,7 @@ func TestAdminClient_CreateRules(t *testing.T) {
 			Name: "ruleWithSQLFilterWithParams",
 			Filter: &SQLFilter{
 				Expression: "MessageID=@stringVar OR MessageID=@intVar OR MessageID=@floatVar OR MessageID=@dateTimeVar OR MessageID=@boolVar",
-				Parameters: map[string]interface{}{
+				Parameters: map[string]any{
 					"@stringVar":   "hello world",
 					"@intVar":      int64(100),
 					"@floatVar":    float64(100.1),
@@ -1268,7 +1415,7 @@ func TestAdminClient_CreateRules(t *testing.T) {
 				SessionID:        to.Ptr("sessionID"),
 				Subject:          to.Ptr("subject"),
 				To:               to.Ptr("to"),
-				ApplicationProperties: map[string]interface{}{
+				ApplicationProperties: map[string]any{
 					"CustomProp1": "hello",
 				},
 			},
@@ -1283,7 +1430,7 @@ func TestAdminClient_CreateRules(t *testing.T) {
 			Name: "ruleWithAction",
 			Action: &SQLAction{
 				Expression: "SET MessageID=@stringVar SET MessageID=@intVar SET MessageID=@floatVar SET MessageID=@dateTimeVar SET MessageID=@boolVar",
-				Parameters: map[string]interface{}{
+				Parameters: map[string]any{
 					"@stringVar":   "hello world",
 					"@intVar":      int64(100),
 					"@floatVar":    float64(100.1),
@@ -1302,7 +1449,7 @@ func TestAdminClient_CreateRules(t *testing.T) {
 			Name: "ruleWithFilterAndAction",
 			Filter: &SQLFilter{
 				Expression: "MessageID=@stringVar OR MessageID=@intVar OR MessageID=@floatVar OR MessageID=@dateTimeVar OR MessageID=@boolVar",
-				Parameters: map[string]interface{}{
+				Parameters: map[string]any{
 					"@stringVar":   "hello world",
 					"@intVar":      int64(100),
 					"@floatVar":    float64(100.1),
@@ -1312,7 +1459,7 @@ func TestAdminClient_CreateRules(t *testing.T) {
 			},
 			Action: &SQLAction{
 				Expression: "SET MessageID=@stringVar SET MessageID=@intVar SET MessageID=@floatVar SET MessageID=@dateTimeVar SET MessageID=@boolVar",
-				Parameters: map[string]interface{}{
+				Parameters: map[string]any{
 					"@stringVar":   "hello world",
 					"@intVar":      int64(100),
 					"@floatVar":    float64(100.1),
@@ -1465,7 +1612,7 @@ type emwrap struct {
 	inner atom.EntityManager
 }
 
-func (em *emwrap) Put(ctx context.Context, entityPath string, body interface{}, respObj interface{}, options *atom.ExecuteOptions) (*http.Response, error) {
+func (em *emwrap) Put(ctx context.Context, entityPath string, body any, respObj any, options *atom.ExecuteOptions) (*http.Response, error) {
 	resp, err := em.inner.Put(ctx, entityPath, body, respObj, options)
 
 	if err != nil {
@@ -1481,7 +1628,7 @@ func (em *emwrap) Delete(ctx context.Context, entityPath string) (*http.Response
 }
 func (em *emwrap) TokenProvider() auth.TokenProvider { return em.inner.TokenProvider() }
 
-func (em *emwrap) Get(ctx context.Context, entityPath string, respObj interface{}) (*http.Response, error) {
+func (em *emwrap) Get(ctx context.Context, entityPath string, respObj any) (*http.Response, error) {
 	resp, err := em.inner.Get(ctx, entityPath, respObj)
 
 	if err != nil {
@@ -1492,7 +1639,7 @@ func (em *emwrap) Get(ctx context.Context, entityPath string, respObj interface{
 	return resp, err
 }
 
-func (*emwrap) makeFilterAndActionUnknown(respObj interface{}) {
+func (*emwrap) makeFilterAndActionUnknown(respObj any) {
 	switch actual := respObj.(type) {
 	case **atom.RuleEnvelope:
 		f := (*actual).Content.RuleDescription.Filter
@@ -1526,7 +1673,7 @@ func TestAdminClient_UnknownFilterRoundtrippingWorks(t *testing.T) {
 		Name: "ruleWithFilterAndAction",
 		Filter: &SQLFilter{
 			Expression: "MessageID=@stringVar OR MessageID=@intVar OR MessageID=@floatVar OR MessageID=@dateTimeVar OR MessageID=@boolVar",
-			Parameters: map[string]interface{}{
+			Parameters: map[string]any{
 				"@stringVar":   "hello world",
 				"@intVar":      int64(100),
 				"@floatVar":    float64(100.1),
@@ -1536,7 +1683,7 @@ func TestAdminClient_UnknownFilterRoundtrippingWorks(t *testing.T) {
 		},
 		Action: &SQLAction{
 			Expression: "SET MessageID=@stringVar SET MessageID=@intVar SET MessageID=@floatVar SET MessageID=@dateTimeVar SET MessageID=@boolVar",
-			Parameters: map[string]interface{}{
+			Parameters: map[string]any{
 				"@stringVar":   "hello world",
 				"@intVar":      int64(100),
 				"@floatVar":    float64(100.1),
@@ -1608,7 +1755,7 @@ type entityManagerForPagerTests struct {
 	getPaths []string
 }
 
-func (em *entityManagerForPagerTests) Get(ctx context.Context, entityPath string, respObj interface{}) (*http.Response, error) {
+func (em *entityManagerForPagerTests) Get(ctx context.Context, entityPath string, respObj any) (*http.Response, error) {
 	em.getPaths = append(em.getPaths, entityPath)
 
 	switch feedPtrPtr := respObj.(type) {
@@ -1634,7 +1781,7 @@ func TestAdminClient_pagerWithLightPage(t *testing.T) {
 	em := &entityManagerForPagerTests{}
 	adminClient.em = em
 
-	pager := adminClient.newPagerFunc("/$Resources/Topics", 10, func(pv interface{}) int {
+	pager := adminClient.newPagerFunc("/$Resources/Topics", 10, func(pv any) int {
 		// note that we're returning fewer results than the max page size
 		// in ATOM < max page size means this is the last page of results.
 		return 3
@@ -1677,7 +1824,7 @@ func TestAdminClient_pagerWithFullPage(t *testing.T) {
 	// first request - got 10 results back, not EOF
 	simulatedPageSize := 10
 
-	pager := adminClient.newPagerFunc("/$Resources/Topics", 10, func(pv interface{}) int {
+	pager := adminClient.newPagerFunc("/$Resources/Topics", 10, func(pv any) int {
 		return simulatedPageSize
 	})
 

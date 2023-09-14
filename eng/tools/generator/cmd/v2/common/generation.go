@@ -20,22 +20,24 @@ import (
 )
 
 type GenerateContext struct {
-	SDKPath          string
-	SDKRepo          *repo.SDKRepository
-	SpecPath         string
-	SpecCommitHash   string
-	SpecReadmeFile   string
-	SpecReadmeGoFile string
-	SpecRepoURL      string
+	SDKPath           string
+	SDKRepo           *repo.SDKRepository
+	SpecPath          string
+	SpecCommitHash    string
+	SpecReadmeFile    string
+	SpecReadmeGoFile  string
+	SpecRepoURL       string
+	UpdateSpecVersion bool
 }
 
 type GenerateResult struct {
-	Version        string
-	RPName         string
-	PackageName    string
-	PackageAbsPath string
-	Changelog      model.Changelog
-	ChangelogMD    string
+	Version           string
+	RPName            string
+	PackageName       string
+	PackageAbsPath    string
+	Changelog         model.Changelog
+	ChangelogMD       string
+	PullRequestLabels string
 }
 
 type GenerateParam struct {
@@ -154,8 +156,10 @@ func (ctx *GenerateContext) GenerateForSingleRPNamespace(generateParam *Generate
 	} else {
 		log.Printf("Change swagger config in `autorest.md` according to repo URL and commit ID...")
 		autorestMdPath := filepath.Join(packagePath, "autorest.md")
-		if err := ChangeConfigWithCommitID(autorestMdPath, ctx.SpecRepoURL, ctx.SpecCommitHash, generateParam.SpecRPName); err != nil {
-			return nil, err
+		if ctx.UpdateSpecVersion {
+			if err := ChangeConfigWithCommitID(autorestMdPath, ctx.SpecRepoURL, ctx.SpecCommitHash, generateParam.SpecRPName); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -164,6 +168,15 @@ func (ctx *GenerateContext) GenerateForSingleRPNamespace(generateParam *Generate
 		log.Printf("Remove tag set for swagger config in `autorest.md`...")
 		autorestMdPath := filepath.Join(packagePath, "autorest.md")
 		if err := RemoveTagSet(autorestMdPath); err != nil {
+			return nil, err
+		}
+	}
+
+	// add tag set
+	if !generateParam.RemoveTagSet && generateParam.NamespaceConfig != "" && !onBoard {
+		log.Printf("Add tag in `autorest.md`...")
+		autorestMdPath := filepath.Join(packagePath, "autorest.md")
+		if err := AddTagSet(autorestMdPath, generateParam.NamespaceConfig); err != nil {
 			return nil, err
 		}
 	}
@@ -211,8 +224,9 @@ func (ctx *GenerateContext) GenerateForSingleRPNamespace(generateParam *Generate
 	}
 
 	log.Printf("filter changelog...")
-	FilterChangelog(changelog, MarshalUnmarshalFilter, EnumFilter, FuncFilter, LROFilter, InterfaceToAnyFilter)
+	FilterChangelog(changelog, MarshalUnmarshalFilter, EnumFilter, FuncFilter, LROFilter, PageableFilter, InterfaceToAnyFilter)
 
+	var prl PullRequestLabel
 	if onBoard {
 		log.Printf("Replace {{NewClientName}} placeholder in the README.md ")
 		if err = ReplaceNewClientNamePlaceholder(packagePath, newExports); err != nil {
@@ -230,6 +244,7 @@ func (ctx *GenerateContext) GenerateForSingleRPNamespace(generateParam *Generate
 			}
 		}
 
+		prl = FirstBetaLabel
 		if !isCurrentPreview {
 			version, err = semver.NewVersion("1.0.0")
 			if err != nil {
@@ -245,20 +260,22 @@ func (ctx *GenerateContext) GenerateForSingleRPNamespace(generateParam *Generate
 			if err = ReplaceVersion(packagePath, version.String()); err != nil {
 				return nil, err
 			}
+			prl = FirstGALabel
 		}
 
 		return &GenerateResult{
-			Version:        version.String(),
-			RPName:         generateParam.RPName,
-			PackageName:    generateParam.NamespaceName,
-			PackageAbsPath: packagePath,
-			Changelog:      *changelog,
-			ChangelogMD:    changelog.ToCompactMarkdown() + "\n" + changelog.GetChangeSummary(),
+			Version:           version.String(),
+			RPName:            generateParam.RPName,
+			PackageName:       generateParam.NamespaceName,
+			PackageAbsPath:    packagePath,
+			Changelog:         *changelog,
+			ChangelogMD:       changelog.ToCompactMarkdown() + "\n" + changelog.GetChangeSummary(),
+			PullRequestLabels: string(prl),
 		}, nil
 	} else {
 		log.Printf("Calculate new version...")
 		if generateParam.SpecficVersion == "" {
-			version, err = CalculateNewVersion(changelog, previousVersion, isCurrentPreview)
+			version, prl, err = CalculateNewVersion(changelog, previousVersion, isCurrentPreview)
 			if err != nil {
 				return nil, err
 			}
@@ -281,6 +298,23 @@ func (ctx *GenerateContext) GenerateForSingleRPNamespace(generateParam *Generate
 			return nil, err
 		}
 
+		if changelog.HasBreakingChanges() && isGenerateFake(packagePath) {
+			log.Printf("Replace fake module v2+...")
+			if err = replaceModuleImport(packagePath, generateParam.RPName, generateParam.NamespaceName, previousVersion, version.String(),
+				"fake", "_server.go"); err != nil {
+				return nil, err
+			}
+		}
+
+		// When sdk has major version bump, the live test needs to update the module referenced in the code.
+		if changelog.HasBreakingChanges() && existSuffixFile(packagePath, "_live_test.go") {
+			log.Printf("Replace live test module v2+...")
+			if err = replaceModuleImport(packagePath, generateParam.RPName, generateParam.NamespaceName, previousVersion, version.String(),
+				"", "_live_test.go"); err != nil {
+				return nil, err
+			}
+		}
+
 		// Example generation should be the last step because the package import relay on the new calculated version
 		if !generateParam.SkipGenerateExample {
 			log.Printf("Generate examples...")
@@ -294,12 +328,13 @@ func (ctx *GenerateContext) GenerateForSingleRPNamespace(generateParam *Generate
 		}
 
 		return &GenerateResult{
-			Version:        version.String(),
-			RPName:         generateParam.RPName,
-			PackageName:    generateParam.NamespaceName,
-			PackageAbsPath: packagePath,
-			Changelog:      *changelog,
-			ChangelogMD:    changelogMd + "\n" + changelog.GetChangeSummary(),
+			Version:           version.String(),
+			RPName:            generateParam.RPName,
+			PackageName:       generateParam.NamespaceName,
+			PackageAbsPath:    packagePath,
+			Changelog:         *changelog,
+			ChangelogMD:       changelogMd + "\n" + changelog.GetChangeSummary(),
+			PullRequestLabels: string(prl),
 		}, nil
 	}
 }

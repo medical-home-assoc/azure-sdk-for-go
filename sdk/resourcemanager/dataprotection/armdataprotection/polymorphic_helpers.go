@@ -15,7 +15,7 @@ func unmarshalAuthCredentialsClassification(rawMsg json.RawMessage) (AuthCredent
 	if rawMsg == nil {
 		return nil, nil
 	}
-	var m map[string]interface{}
+	var m map[string]any
 	if err := json.Unmarshal(rawMsg, &m); err != nil {
 		return nil, err
 	}
@@ -33,7 +33,7 @@ func unmarshalAzureBackupRecoveryPointClassification(rawMsg json.RawMessage) (Az
 	if rawMsg == nil {
 		return nil, nil
 	}
-	var m map[string]interface{}
+	var m map[string]any
 	if err := json.Unmarshal(rawMsg, &m); err != nil {
 		return nil, err
 	}
@@ -51,7 +51,7 @@ func unmarshalAzureBackupRestoreRequestClassification(rawMsg json.RawMessage) (A
 	if rawMsg == nil {
 		return nil, nil
 	}
-	var m map[string]interface{}
+	var m map[string]any
 	if err := json.Unmarshal(rawMsg, &m); err != nil {
 		return nil, err
 	}
@@ -73,7 +73,7 @@ func unmarshalBackupCriteriaClassification(rawMsg json.RawMessage) (BackupCriter
 	if rawMsg == nil {
 		return nil, nil
 	}
-	var m map[string]interface{}
+	var m map[string]any
 	if err := json.Unmarshal(rawMsg, &m); err != nil {
 		return nil, err
 	}
@@ -110,7 +110,7 @@ func unmarshalBackupDatasourceParametersClassification(rawMsg json.RawMessage) (
 	if rawMsg == nil {
 		return nil, nil
 	}
-	var m map[string]interface{}
+	var m map[string]any
 	if err := json.Unmarshal(rawMsg, &m); err != nil {
 		return nil, err
 	}
@@ -149,7 +149,7 @@ func unmarshalBackupParametersClassification(rawMsg json.RawMessage) (BackupPara
 	if rawMsg == nil {
 		return nil, nil
 	}
-	var m map[string]interface{}
+	var m map[string]any
 	if err := json.Unmarshal(rawMsg, &m); err != nil {
 		return nil, err
 	}
@@ -167,7 +167,7 @@ func unmarshalBaseBackupPolicyClassification(rawMsg json.RawMessage) (BaseBackup
 	if rawMsg == nil {
 		return nil, nil
 	}
-	var m map[string]interface{}
+	var m map[string]any
 	if err := json.Unmarshal(rawMsg, &m); err != nil {
 		return nil, err
 	}
@@ -185,7 +185,7 @@ func unmarshalBasePolicyRuleClassification(rawMsg json.RawMessage) (BasePolicyRu
 	if rawMsg == nil {
 		return nil, nil
 	}
-	var m map[string]interface{}
+	var m map[string]any
 	if err := json.Unmarshal(rawMsg, &m); err != nil {
 		return nil, err
 	}
@@ -220,11 +220,27 @@ func unmarshalBasePolicyRuleClassificationArray(rawMsg json.RawMessage) ([]BaseP
 	return fArray, nil
 }
 
+func unmarshalBaseResourcePropertiesClassification(rawMsg json.RawMessage) (BaseResourcePropertiesClassification, error) {
+	if rawMsg == nil {
+		return nil, nil
+	}
+	var m map[string]any
+	if err := json.Unmarshal(rawMsg, &m); err != nil {
+		return nil, err
+	}
+	var b BaseResourcePropertiesClassification
+	switch m["objectType"] {
+	default:
+		b = &BaseResourceProperties{}
+	}
+	return b, json.Unmarshal(rawMsg, b)
+}
+
 func unmarshalCopyOptionClassification(rawMsg json.RawMessage) (CopyOptionClassification, error) {
 	if rawMsg == nil {
 		return nil, nil
 	}
-	var m map[string]interface{}
+	var m map[string]any
 	if err := json.Unmarshal(rawMsg, &m); err != nil {
 		return nil, err
 	}
@@ -246,7 +262,7 @@ func unmarshalDataStoreParametersClassification(rawMsg json.RawMessage) (DataSto
 	if rawMsg == nil {
 		return nil, nil
 	}
-	var m map[string]interface{}
+	var m map[string]any
 	if err := json.Unmarshal(rawMsg, &m); err != nil {
 		return nil, err
 	}
@@ -283,7 +299,7 @@ func unmarshalDeleteOptionClassification(rawMsg json.RawMessage) (DeleteOptionCl
 	if rawMsg == nil {
 		return nil, nil
 	}
-	var m map[string]interface{}
+	var m map[string]any
 	if err := json.Unmarshal(rawMsg, &m); err != nil {
 		return nil, err
 	}
@@ -301,7 +317,7 @@ func unmarshalFeatureValidationResponseBaseClassification(rawMsg json.RawMessage
 	if rawMsg == nil {
 		return nil, nil
 	}
-	var m map[string]interface{}
+	var m map[string]any
 	if err := json.Unmarshal(rawMsg, &m); err != nil {
 		return nil, err
 	}
@@ -319,7 +335,7 @@ func unmarshalItemLevelRestoreCriteriaClassification(rawMsg json.RawMessage) (It
 	if rawMsg == nil {
 		return nil, nil
 	}
-	var m map[string]interface{}
+	var m map[string]any
 	if err := json.Unmarshal(rawMsg, &m); err != nil {
 		return nil, err
 	}
@@ -364,7 +380,7 @@ func unmarshalOperationExtendedInfoClassification(rawMsg json.RawMessage) (Opera
 	if rawMsg == nil {
 		return nil, nil
 	}
-	var m map[string]interface{}
+	var m map[string]any
 	if err := json.Unmarshal(rawMsg, &m); err != nil {
 		return nil, err
 	}
@@ -382,7 +398,7 @@ func unmarshalRestoreTargetInfoBaseClassification(rawMsg json.RawMessage) (Resto
 	if rawMsg == nil {
 		return nil, nil
 	}
-	var m map[string]interface{}
+	var m map[string]any
 	if err := json.Unmarshal(rawMsg, &m); err != nil {
 		return nil, err
 	}
@@ -404,7 +420,7 @@ func unmarshalTriggerContextClassification(rawMsg json.RawMessage) (TriggerConte
 	if rawMsg == nil {
 		return nil, nil
 	}
-	var m map[string]interface{}
+	var m map[string]any
 	if err := json.Unmarshal(rawMsg, &m); err != nil {
 		return nil, err
 	}

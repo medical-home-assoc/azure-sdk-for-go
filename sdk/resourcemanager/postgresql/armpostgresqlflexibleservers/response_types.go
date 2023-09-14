@@ -9,12 +9,12 @@
 
 package armpostgresqlflexibleservers
 
-// AdministratorsClientCreateResponse contains the response from method AdministratorsClient.Create.
+// AdministratorsClientCreateResponse contains the response from method AdministratorsClient.BeginCreate.
 type AdministratorsClientCreateResponse struct {
 	ActiveDirectoryAdministrator
 }
 
-// AdministratorsClientDeleteResponse contains the response from method AdministratorsClient.Delete.
+// AdministratorsClientDeleteResponse contains the response from method AdministratorsClient.BeginDelete.
 type AdministratorsClientDeleteResponse struct {
 	// placeholder for future response values
 }
@@ -24,7 +24,7 @@ type AdministratorsClientGetResponse struct {
 	ActiveDirectoryAdministrator
 }
 
-// AdministratorsClientListByServerResponse contains the response from method AdministratorsClient.ListByServer.
+// AdministratorsClientListByServerResponse contains the response from method AdministratorsClient.NewListByServerPager.
 type AdministratorsClientListByServerResponse struct {
 	AdministratorListResult
 }
@@ -34,7 +34,7 @@ type BackupsClientGetResponse struct {
 	ServerBackup
 }
 
-// BackupsClientListByServerResponse contains the response from method BackupsClient.ListByServer.
+// BackupsClientListByServerResponse contains the response from method BackupsClient.NewListByServerPager.
 type BackupsClientListByServerResponse struct {
 	ServerBackupListResult
 }
@@ -54,27 +54,27 @@ type ConfigurationsClientGetResponse struct {
 	Configuration
 }
 
-// ConfigurationsClientListByServerResponse contains the response from method ConfigurationsClient.ListByServer.
+// ConfigurationsClientListByServerResponse contains the response from method ConfigurationsClient.NewListByServerPager.
 type ConfigurationsClientListByServerResponse struct {
 	ConfigurationListResult
 }
 
-// ConfigurationsClientPutResponse contains the response from method ConfigurationsClient.Put.
+// ConfigurationsClientPutResponse contains the response from method ConfigurationsClient.BeginPut.
 type ConfigurationsClientPutResponse struct {
 	Configuration
 }
 
-// ConfigurationsClientUpdateResponse contains the response from method ConfigurationsClient.Update.
+// ConfigurationsClientUpdateResponse contains the response from method ConfigurationsClient.BeginUpdate.
 type ConfigurationsClientUpdateResponse struct {
 	Configuration
 }
 
-// DatabasesClientCreateResponse contains the response from method DatabasesClient.Create.
+// DatabasesClientCreateResponse contains the response from method DatabasesClient.BeginCreate.
 type DatabasesClientCreateResponse struct {
 	Database
 }
 
-// DatabasesClientDeleteResponse contains the response from method DatabasesClient.Delete.
+// DatabasesClientDeleteResponse contains the response from method DatabasesClient.BeginDelete.
 type DatabasesClientDeleteResponse struct {
 	// placeholder for future response values
 }
@@ -84,17 +84,17 @@ type DatabasesClientGetResponse struct {
 	Database
 }
 
-// DatabasesClientListByServerResponse contains the response from method DatabasesClient.ListByServer.
+// DatabasesClientListByServerResponse contains the response from method DatabasesClient.NewListByServerPager.
 type DatabasesClientListByServerResponse struct {
 	DatabaseListResult
 }
 
-// FirewallRulesClientCreateOrUpdateResponse contains the response from method FirewallRulesClient.CreateOrUpdate.
+// FirewallRulesClientCreateOrUpdateResponse contains the response from method FirewallRulesClient.BeginCreateOrUpdate.
 type FirewallRulesClientCreateOrUpdateResponse struct {
 	FirewallRule
 }
 
-// FirewallRulesClientDeleteResponse contains the response from method FirewallRulesClient.Delete.
+// FirewallRulesClientDeleteResponse contains the response from method FirewallRulesClient.BeginDelete.
 type FirewallRulesClientDeleteResponse struct {
 	// placeholder for future response values
 }
@@ -104,9 +104,21 @@ type FirewallRulesClientGetResponse struct {
 	FirewallRule
 }
 
-// FirewallRulesClientListByServerResponse contains the response from method FirewallRulesClient.ListByServer.
+// FirewallRulesClientListByServerResponse contains the response from method FirewallRulesClient.NewListByServerPager.
 type FirewallRulesClientListByServerResponse struct {
 	FirewallRuleListResult
+}
+
+// FlexibleServerClientStartLtrBackupResponse contains the response from method FlexibleServerClient.BeginStartLtrBackup.
+type FlexibleServerClientStartLtrBackupResponse struct {
+	LtrBackupResponse
+}
+
+// FlexibleServerClientTriggerLtrPreBackupResponse contains the response from method FlexibleServerClient.TriggerLtrPreBackup.
+type FlexibleServerClientTriggerLtrPreBackupResponse struct {
+	LtrPreBackupResponse
+	// XMSRequestID contains the information returned from the x-ms-request-id header response.
+	XMSRequestID *string
 }
 
 // GetPrivateDNSZoneSuffixClientExecuteResponse contains the response from method GetPrivateDNSZoneSuffixClient.Execute.
@@ -115,9 +127,49 @@ type GetPrivateDNSZoneSuffixClientExecuteResponse struct {
 	Value *string
 }
 
-// LocationBasedCapabilitiesClientExecuteResponse contains the response from method LocationBasedCapabilitiesClient.Execute.
+// LocationBasedCapabilitiesClientExecuteResponse contains the response from method LocationBasedCapabilitiesClient.NewExecutePager.
 type LocationBasedCapabilitiesClientExecuteResponse struct {
 	CapabilitiesListResult
+}
+
+// LogFilesClientListByServerResponse contains the response from method LogFilesClient.NewListByServerPager.
+type LogFilesClientListByServerResponse struct {
+	LogFileListResult
+}
+
+// LtrBackupOperationsClientGetResponse contains the response from method LtrBackupOperationsClient.Get.
+type LtrBackupOperationsClientGetResponse struct {
+	LtrServerBackupOperation
+}
+
+// LtrBackupOperationsClientListByServerResponse contains the response from method LtrBackupOperationsClient.NewListByServerPager.
+type LtrBackupOperationsClientListByServerResponse struct {
+	LtrServerBackupOperationList
+}
+
+// MigrationsClientCreateResponse contains the response from method MigrationsClient.Create.
+type MigrationsClientCreateResponse struct {
+	MigrationResource
+}
+
+// MigrationsClientDeleteResponse contains the response from method MigrationsClient.Delete.
+type MigrationsClientDeleteResponse struct {
+	// placeholder for future response values
+}
+
+// MigrationsClientGetResponse contains the response from method MigrationsClient.Get.
+type MigrationsClientGetResponse struct {
+	MigrationResource
+}
+
+// MigrationsClientListByTargetServerResponse contains the response from method MigrationsClient.NewListByTargetServerPager.
+type MigrationsClientListByTargetServerResponse struct {
+	MigrationResourceListResult
+}
+
+// MigrationsClientUpdateResponse contains the response from method MigrationsClient.Update.
+type MigrationsClientUpdateResponse struct {
+	MigrationResource
 }
 
 // OperationsClientListResponse contains the response from method OperationsClient.List.
@@ -125,17 +177,27 @@ type OperationsClientListResponse struct {
 	OperationListResult
 }
 
-// ReplicasClientListByServerResponse contains the response from method ReplicasClient.ListByServer.
+// PostgreSQLManagementClientCheckMigrationNameAvailabilityResponse contains the response from method PostgreSQLManagementClient.CheckMigrationNameAvailability.
+type PostgreSQLManagementClientCheckMigrationNameAvailabilityResponse struct {
+	MigrationNameAvailabilityResource
+}
+
+// ReplicasClientListByServerResponse contains the response from method ReplicasClient.NewListByServerPager.
 type ReplicasClientListByServerResponse struct {
 	ServerListResult
 }
 
-// ServersClientCreateResponse contains the response from method ServersClient.Create.
+// ServerCapabilitiesClientListResponse contains the response from method ServerCapabilitiesClient.NewListPager.
+type ServerCapabilitiesClientListResponse struct {
+	CapabilitiesListResult
+}
+
+// ServersClientCreateResponse contains the response from method ServersClient.BeginCreate.
 type ServersClientCreateResponse struct {
 	Server
 }
 
-// ServersClientDeleteResponse contains the response from method ServersClient.Delete.
+// ServersClientDeleteResponse contains the response from method ServersClient.BeginDelete.
 type ServersClientDeleteResponse struct {
 	// placeholder for future response values
 }
@@ -145,32 +207,32 @@ type ServersClientGetResponse struct {
 	Server
 }
 
-// ServersClientListByResourceGroupResponse contains the response from method ServersClient.ListByResourceGroup.
+// ServersClientListByResourceGroupResponse contains the response from method ServersClient.NewListByResourceGroupPager.
 type ServersClientListByResourceGroupResponse struct {
 	ServerListResult
 }
 
-// ServersClientListResponse contains the response from method ServersClient.List.
+// ServersClientListResponse contains the response from method ServersClient.NewListPager.
 type ServersClientListResponse struct {
 	ServerListResult
 }
 
-// ServersClientRestartResponse contains the response from method ServersClient.Restart.
+// ServersClientRestartResponse contains the response from method ServersClient.BeginRestart.
 type ServersClientRestartResponse struct {
 	// placeholder for future response values
 }
 
-// ServersClientStartResponse contains the response from method ServersClient.Start.
+// ServersClientStartResponse contains the response from method ServersClient.BeginStart.
 type ServersClientStartResponse struct {
 	// placeholder for future response values
 }
 
-// ServersClientStopResponse contains the response from method ServersClient.Stop.
+// ServersClientStopResponse contains the response from method ServersClient.BeginStop.
 type ServersClientStopResponse struct {
 	// placeholder for future response values
 }
 
-// ServersClientUpdateResponse contains the response from method ServersClient.Update.
+// ServersClientUpdateResponse contains the response from method ServersClient.BeginUpdate.
 type ServersClientUpdateResponse struct {
 	Server
 }

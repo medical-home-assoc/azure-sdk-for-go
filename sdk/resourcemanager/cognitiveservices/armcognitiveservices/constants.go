@@ -11,8 +11,24 @@ package armcognitiveservices
 
 const (
 	moduleName    = "armcognitiveservices"
-	moduleVersion = "v1.2.0"
+	moduleVersion = "v1.5.0"
 )
+
+// AbusePenaltyAction - The action of AbusePenalty.
+type AbusePenaltyAction string
+
+const (
+	AbusePenaltyActionBlock    AbusePenaltyAction = "Block"
+	AbusePenaltyActionThrottle AbusePenaltyAction = "Throttle"
+)
+
+// PossibleAbusePenaltyActionValues returns the possible values for the AbusePenaltyAction const type.
+func PossibleAbusePenaltyActionValues() []AbusePenaltyAction {
+	return []AbusePenaltyAction{
+		AbusePenaltyActionBlock,
+		AbusePenaltyActionThrottle,
+	}
+}
 
 // ActionType - Enum. Indicates the action type. "Internal" refers to actions that are for internal only APIs.
 type ActionType string
@@ -25,6 +41,32 @@ const (
 func PossibleActionTypeValues() []ActionType {
 	return []ActionType{
 		ActionTypeInternal,
+	}
+}
+
+// CommitmentPlanProvisioningState - Gets the status of the resource at the time the operation was called.
+type CommitmentPlanProvisioningState string
+
+const (
+	CommitmentPlanProvisioningStateAccepted  CommitmentPlanProvisioningState = "Accepted"
+	CommitmentPlanProvisioningStateCanceled  CommitmentPlanProvisioningState = "Canceled"
+	CommitmentPlanProvisioningStateCreating  CommitmentPlanProvisioningState = "Creating"
+	CommitmentPlanProvisioningStateDeleting  CommitmentPlanProvisioningState = "Deleting"
+	CommitmentPlanProvisioningStateFailed    CommitmentPlanProvisioningState = "Failed"
+	CommitmentPlanProvisioningStateMoving    CommitmentPlanProvisioningState = "Moving"
+	CommitmentPlanProvisioningStateSucceeded CommitmentPlanProvisioningState = "Succeeded"
+)
+
+// PossibleCommitmentPlanProvisioningStateValues returns the possible values for the CommitmentPlanProvisioningState const type.
+func PossibleCommitmentPlanProvisioningStateValues() []CommitmentPlanProvisioningState {
+	return []CommitmentPlanProvisioningState{
+		CommitmentPlanProvisioningStateAccepted,
+		CommitmentPlanProvisioningStateCanceled,
+		CommitmentPlanProvisioningStateCreating,
+		CommitmentPlanProvisioningStateDeleting,
+		CommitmentPlanProvisioningStateFailed,
+		CommitmentPlanProvisioningStateMoving,
+		CommitmentPlanProvisioningStateSucceeded,
 	}
 }
 
@@ -48,13 +90,33 @@ func PossibleCreatedByTypeValues() []CreatedByType {
 	}
 }
 
+// DeploymentModelVersionUpgradeOption - Deployment model version upgrade option.
+type DeploymentModelVersionUpgradeOption string
+
+const (
+	DeploymentModelVersionUpgradeOptionNoAutoUpgrade                  DeploymentModelVersionUpgradeOption = "NoAutoUpgrade"
+	DeploymentModelVersionUpgradeOptionOnceCurrentVersionExpired      DeploymentModelVersionUpgradeOption = "OnceCurrentVersionExpired"
+	DeploymentModelVersionUpgradeOptionOnceNewDefaultVersionAvailable DeploymentModelVersionUpgradeOption = "OnceNewDefaultVersionAvailable"
+)
+
+// PossibleDeploymentModelVersionUpgradeOptionValues returns the possible values for the DeploymentModelVersionUpgradeOption const type.
+func PossibleDeploymentModelVersionUpgradeOptionValues() []DeploymentModelVersionUpgradeOption {
+	return []DeploymentModelVersionUpgradeOption{
+		DeploymentModelVersionUpgradeOptionNoAutoUpgrade,
+		DeploymentModelVersionUpgradeOptionOnceCurrentVersionExpired,
+		DeploymentModelVersionUpgradeOptionOnceNewDefaultVersionAvailable,
+	}
+}
+
 // DeploymentProvisioningState - Gets the status of the resource at the time the operation was called.
 type DeploymentProvisioningState string
 
 const (
 	DeploymentProvisioningStateAccepted  DeploymentProvisioningState = "Accepted"
+	DeploymentProvisioningStateCanceled  DeploymentProvisioningState = "Canceled"
 	DeploymentProvisioningStateCreating  DeploymentProvisioningState = "Creating"
 	DeploymentProvisioningStateDeleting  DeploymentProvisioningState = "Deleting"
+	DeploymentProvisioningStateDisabled  DeploymentProvisioningState = "Disabled"
 	DeploymentProvisioningStateFailed    DeploymentProvisioningState = "Failed"
 	DeploymentProvisioningStateMoving    DeploymentProvisioningState = "Moving"
 	DeploymentProvisioningStateSucceeded DeploymentProvisioningState = "Succeeded"
@@ -64,8 +126,10 @@ const (
 func PossibleDeploymentProvisioningStateValues() []DeploymentProvisioningState {
 	return []DeploymentProvisioningState{
 		DeploymentProvisioningStateAccepted,
+		DeploymentProvisioningStateCanceled,
 		DeploymentProvisioningStateCreating,
 		DeploymentProvisioningStateDeleting,
+		DeploymentProvisioningStateDisabled,
 		DeploymentProvisioningStateFailed,
 		DeploymentProvisioningStateMoving,
 		DeploymentProvisioningStateSucceeded,
@@ -94,6 +158,7 @@ type HostingModel string
 const (
 	HostingModelConnectedContainer    HostingModel = "ConnectedContainer"
 	HostingModelDisconnectedContainer HostingModel = "DisconnectedContainer"
+	HostingModelProvisionedWeb        HostingModel = "ProvisionedWeb"
 	HostingModelWeb                   HostingModel = "Web"
 )
 
@@ -102,6 +167,7 @@ func PossibleHostingModelValues() []HostingModel {
 	return []HostingModel{
 		HostingModelConnectedContainer,
 		HostingModelDisconnectedContainer,
+		HostingModelProvisionedWeb,
 		HostingModelWeb,
 	}
 }
@@ -135,6 +201,22 @@ func PossibleKeySourceValues() []KeySource {
 	return []KeySource{
 		KeySourceMicrosoftCognitiveServices,
 		KeySourceMicrosoftKeyVault,
+	}
+}
+
+// ModelLifecycleStatus - Model lifecycle status.
+type ModelLifecycleStatus string
+
+const (
+	ModelLifecycleStatusGenerallyAvailable ModelLifecycleStatus = "GenerallyAvailable"
+	ModelLifecycleStatusPreview            ModelLifecycleStatus = "Preview"
+)
+
+// PossibleModelLifecycleStatusValues returns the possible values for the ModelLifecycleStatus const type.
+func PossibleModelLifecycleStatusValues() []ModelLifecycleStatus {
+	return []ModelLifecycleStatus{
+		ModelLifecycleStatusGenerallyAvailable,
+		ModelLifecycleStatusPreview,
 	}
 }
 
@@ -323,6 +405,24 @@ func PossibleResourceSKURestrictionsTypeValues() []ResourceSKURestrictionsType {
 	return []ResourceSKURestrictionsType{
 		ResourceSKURestrictionsTypeLocation,
 		ResourceSKURestrictionsTypeZone,
+	}
+}
+
+// RoutingMethods - Multiregion routing methods.
+type RoutingMethods string
+
+const (
+	RoutingMethodsPerformance RoutingMethods = "Performance"
+	RoutingMethodsPriority    RoutingMethods = "Priority"
+	RoutingMethodsWeighted    RoutingMethods = "Weighted"
+)
+
+// PossibleRoutingMethodsValues returns the possible values for the RoutingMethods const type.
+func PossibleRoutingMethodsValues() []RoutingMethods {
+	return []RoutingMethods{
+		RoutingMethodsPerformance,
+		RoutingMethodsPriority,
+		RoutingMethodsWeighted,
 	}
 }
 

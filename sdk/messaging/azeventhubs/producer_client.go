@@ -16,7 +16,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azeventhubs/internal"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azeventhubs/internal/amqpwrap"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azeventhubs/internal/exported"
-	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azeventhubs/internal/go-amqp"
+	"github.com/Azure/go-amqp"
 )
 
 // WebSocketConnParams are passed to your web socket creation function (ClientOptions.NewWebSocketConn)
@@ -28,9 +28,6 @@ type RetryOptions = exported.RetryOptions
 // ProducerClientOptions contains options for the `NewProducerClient` and `NewProducerClientFromConnectionString`
 // functions.
 type ProducerClientOptions struct {
-	// TLSConfig configures a client with a custom *tls.Config.
-	TLSConfig *tls.Config
-
 	// Application ID that will be passed to the namespace.
 	ApplicationID string
 
@@ -41,15 +38,17 @@ type ProducerClientOptions struct {
 	// RetryOptions controls how often operations are retried from this client and any
 	// Receivers and Senders created from this client.
 	RetryOptions RetryOptions
+
+	// TLSConfig configures a client with a custom *tls.Config.
+	TLSConfig *tls.Config
 }
 
 // ProducerClient can be used to send events to an Event Hub.
 type ProducerClient struct {
-	retryOptions RetryOptions
-	namespace    internal.NamespaceForProducerOrConsumer
 	eventHub     string
-
-	links *internal.Links[amqpwrap.AMQPSenderCloser]
+	links        *internal.Links[amqpwrap.AMQPSenderCloser]
+	namespace    internal.NamespaceForProducerOrConsumer
+	retryOptions RetryOptions
 }
 
 // anyPartitionID is what we target if we want to send a message and let Event Hubs pick a partition
@@ -58,7 +57,7 @@ type ProducerClient struct {
 const anyPartitionID = ""
 
 // NewProducerClient creates a ProducerClient which uses an azcore.TokenCredential for authentication. You
-// MUST call [azeventhubs.ProducerClient.Close] on this client to avoid leaking resources.
+// MUST call [ProducerClient.Close] on this client to avoid leaking resources.
 //
 // The fullyQualifiedNamespace is the Event Hubs namespace name (ex: myeventhub.servicebus.windows.net)
 // The credential is one of the credentials in the [azidentity] package.
@@ -73,7 +72,7 @@ func NewProducerClient(fullyQualifiedNamespace string, eventHub string, credenti
 }
 
 // NewProducerClientFromConnectionString creates a ProducerClient from a connection string. You
-// MUST call [azeventhubs.ProducerClient.Close] on this client to avoid leaking resources.
+// MUST call [ProducerClient.Close] on this client to avoid leaking resources.
 //
 // connectionString can be one of two formats - with or without an EntityPath key.
 //
@@ -98,7 +97,10 @@ func NewProducerClientFromConnectionString(connectionString string, eventHub str
 	}, options)
 }
 
-// EventDataBatchOptions contains optional parameters for the NewEventDataBatch function
+// EventDataBatchOptions contains optional parameters for the [ProducerClient.NewEventDataBatch] function.
+//
+// If both PartitionKey and PartitionID are nil, Event Hubs will choose an arbitrary partition
+// for any events in this [EventDataBatch].
 type EventDataBatchOptions struct {
 	// MaxBytes overrides the max size (in bytes) for a batch.
 	// By default NewEventDataBatch will use the max message size provided by the service.
@@ -121,6 +123,9 @@ type EventDataBatchOptions struct {
 // for the Event Hubs link, using it's [azeventhubs.EventDataBatch.AddEventData] function.
 // A lower size limit can also be configured through the options.
 //
+// NOTE: if options is nil or empty, Event Hubs will choose an arbitrary partition for any
+// events in this [EventDataBatch].
+//
 // If the operation fails it can return an azeventhubs.Error type if the failure is actionable.
 func (pc *ProducerClient) NewEventDataBatch(ctx context.Context, options *EventDataBatchOptions) (*EventDataBatch, error) {
 	var batch *EventDataBatch
@@ -132,7 +137,7 @@ func (pc *ProducerClient) NewEventDataBatch(ctx context.Context, options *EventD
 	}
 
 	err := pc.links.Retry(ctx, exported.EventProducer, "NewEventDataBatch", partitionID, pc.retryOptions, func(ctx context.Context, lwid internal.LinkWithID[amqpwrap.AMQPSenderCloser]) error {
-		tmpBatch, err := newEventDataBatch(lwid.Link, options)
+		tmpBatch, err := newEventDataBatch(lwid.Link(), options)
 
 		if err != nil {
 			return err
@@ -156,8 +161,17 @@ type SendEventDataBatchOptions struct {
 
 // SendEventDataBatch sends an event data batch to Event Hubs.
 func (pc *ProducerClient) SendEventDataBatch(ctx context.Context, batch *EventDataBatch, options *SendEventDataBatchOptions) error {
-	err := pc.links.Retry(ctx, exported.EventProducer, "SendEventDataBatch", getPartitionID(batch.partitionID), pc.retryOptions, func(ctx context.Context, lwid internal.LinkWithID[amqpwrap.AMQPSenderCloser]) error {
-		return lwid.Link.Send(ctx, batch.toAMQPMessage())
+	amqpMessage, err := batch.toAMQPMessage()
+
+	if err != nil {
+		return err
+	}
+
+	partID := getPartitionID(batch.partitionID)
+
+	err = pc.links.Retry(ctx, exported.EventProducer, "SendEventDataBatch", partID, pc.retryOptions, func(ctx context.Context, lwid internal.LinkWithID[amqpwrap.AMQPSenderCloser]) error {
+		azlog.Writef(EventProducer, "[%s] Sending message with ID %v to partition %q", lwid.String(), amqpMessage.Properties.MessageID, partID)
+		return lwid.Link().Send(ctx, amqpMessage, nil)
 	})
 	return internal.TransformError(err)
 }
@@ -165,24 +179,12 @@ func (pc *ProducerClient) SendEventDataBatch(ctx context.Context, batch *EventDa
 // GetPartitionProperties gets properties for a specific partition. This includes data like the last enqueued sequence number, the first sequence
 // number and when an event was last enqueued to the partition.
 func (pc *ProducerClient) GetPartitionProperties(ctx context.Context, partitionID string, options *GetPartitionPropertiesOptions) (PartitionProperties, error) {
-	rpcLink, err := pc.links.GetManagementLink(ctx)
-
-	if err != nil {
-		return PartitionProperties{}, err
-	}
-
-	return getPartitionProperties(ctx, pc.namespace, rpcLink.Link, pc.eventHub, partitionID, options)
+	return getPartitionProperties(ctx, EventProducer, pc.namespace, pc.links, pc.eventHub, partitionID, pc.retryOptions, options)
 }
 
 // GetEventHubProperties gets event hub properties, like the available partition IDs and when the Event Hub was created.
 func (pc *ProducerClient) GetEventHubProperties(ctx context.Context, options *GetEventHubPropertiesOptions) (EventHubProperties, error) {
-	rpcLink, err := pc.links.GetManagementLink(ctx)
-
-	if err != nil {
-		return EventHubProperties{}, err
-	}
-
-	return getEventHubProperties(ctx, pc.namespace, rpcLink.Link, pc.eventHub, options)
+	return getEventHubProperties(ctx, EventProducer, pc.namespace, pc.links, pc.eventHub, pc.retryOptions, options)
 }
 
 // Close releases resources for this client.
@@ -204,11 +206,10 @@ func (pc *ProducerClient) getEntityPath(partitionID string) string {
 	}
 }
 
-func (pc *ProducerClient) newEventHubProducerLink(ctx context.Context, session amqpwrap.AMQPSession, entityPath string) (amqpwrap.AMQPSenderCloser, error) {
-	sender, err := session.NewSender(ctx, entityPath, &amqp.SenderOptions{
-		SettlementMode:              to.Ptr(amqp.ModeMixed),
-		RequestedReceiverSettleMode: to.Ptr(amqp.ModeFirst),
-		IgnoreDispositionErrors:     true,
+func (pc *ProducerClient) newEventHubProducerLink(ctx context.Context, session amqpwrap.AMQPSession, entityPath string, partitionID string) (amqpwrap.AMQPSenderCloser, error) {
+	sender, err := session.NewSender(ctx, entityPath, partitionID, &amqp.SenderOptions{
+		SettlementMode:              to.Ptr(amqp.SenderSettleModeMixed),
+		RequestedReceiverSettleMode: to.Ptr(amqp.ReceiverSettleModeFirst),
 	})
 
 	if err != nil {
@@ -262,6 +263,10 @@ func newProducerClientImpl(creds producerClientCreds, options *ProducerClientOpt
 		}
 
 		nsOptions = append(nsOptions, internal.NamespaceWithRetryOptions(options.RetryOptions))
+	}
+
+	if err != nil {
+		return nil, err
 	}
 
 	tmpNS, err := internal.NewNamespace(nsOptions...)

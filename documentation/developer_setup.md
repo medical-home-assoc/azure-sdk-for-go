@@ -106,7 +106,7 @@ export-clients: true
 go: true
 input-file: <URI to OpenAPI spec file>
 license-header: MICROSOFT_MIT_NO_VERSION
-module: <full module name> (e.g. github.com/Azure/azure-sdk-for-go/sdk/keyvault/azkeys)
+module: <full module name> (e.g. github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys)
 openapi-type: "data-plane"
 output-folder: <output directory>
 use: "@autorest/go@4.0.0-preview.44"
@@ -135,9 +135,7 @@ Testing is built into the Go toolchain as well with the `testing` library. The t
 | playback | `$ENV:AZURE_RECORD_MODE="playback"` | Running tests against recording HTTP interactiosn |
 | live | `$ENV:AZURE_RECORD_MODE="live"` | Bypassing test proxy, running against live service, and not recording HTTP interactions (used by live pipelines) |
 
-To get started first install [`docker`][get_docker]. Then to start the proxy, from the root of the repository, run the command `./eng/common/testproxy/docker-start-proxy.ps1 start`. This command will take care of pulling the pinned docker image and running it in the background.
-
-It is not required to run the test-proxy from within the docker container, but this is how the proxy is run in the Azure DevOps pipelines. If you would like to run the test-proxy in a different manner the [documentation][test_proxy_docs] has more information.
+By default the [recording](recording_package) package will automatically install and run the test proxy server. If there are issues with auto-install or the proxy needs to be run standalone, it can be run manually instead. To get started first [install test-proxy][test_proxy_install] via the standalone executable, then to start the proxy, from the root of the repository, run the command `test-proxy start`. When invoking tests, set the environment variable `PROXY_MANUAL_START` to `true`.
 
 ### Test Mode Options
 
@@ -367,11 +365,12 @@ This creates the pipelines that will verify future PRs. The `azure-sdk-for-go` i
 [go_download]: https://golang.org/dl/
 [require_package]: https://pkg.go.dev/github.com/stretchr/testify/require
 [test_proxy_docs]: https://github.com/Azure/azure-sdk-tools/tree/main/tools/test-proxy
+[test_proxy_install]: https://github.com/Azure/azure-sdk-tools/blob/main/tools/test-proxy/Azure.Sdk.Tools.TestProxy/README.md#via-standalone-executable
 [workspace_setup]: https://www.digitalocean.com/community/tutorials/how-to-install-go-and-set-up-a-local-programming-environment-on-windows-10
 [directory_structure]: https://azure.github.io/azure-sdk/golang_introduction.html
 [module_design]: https://azure.github.io/azure-sdk/golang_introduction.html#azure-sdk-module-design
 [type_declarations]: https://go.dev/ref/spec#Type_declarations
-[azkeys_directory]: https://github.com/Azure/azure-sdk-for-go/tree/sdk/keyvault/azkeys/v0.9.0/sdk/keyvault/azkeys
+[azkeys_directory]: https://github.com/Azure/azure-sdk-for-go/tree/main/sdk/security/keyvault/azkeys
 [aztables_directory]: https://github.com/Azure/azure-sdk-for-go/tree/sdk/data/aztables/v1.0.1/sdk/data/aztables
 [aztemplate]: https://github.com/Azure/azure-sdk-for-go/tree/main/sdk/template/aztemplate
 [api_design]: https://azure.github.io/azure-sdk/golang_introduction.html#azure-sdk-module-design
@@ -381,3 +380,4 @@ This creates the pipelines that will verify future PRs. The `azure-sdk-for-go` i
 [autorest_intro]: https://github.com/Azure/autorest/blob/main/docs/readme.md
 [autorest_directives]: https://github.com/Azure/autorest/blob/main/docs/generate/directives.md
 [test_resources]: https://github.com/Azure/azure-sdk-tools/tree/main/eng/common/TestResources
+[recording_package]: https://github.com/Azure/azure-sdk-for-go/tree/main/sdk/internal/recording

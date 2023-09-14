@@ -127,8 +127,10 @@ func createQueue(t *testing.T, connectionString string, queueProperties *admin.Q
 		queueProperties = &admin.QueueProperties{}
 	}
 
-	autoDeleteOnIdle := "PT5M"
-	queueProperties.AutoDeleteOnIdle = &autoDeleteOnIdle
+	if queueProperties.AutoDeleteOnIdle == nil {
+		autoDeleteOnIdle := "PT5M"
+		queueProperties.AutoDeleteOnIdle = &autoDeleteOnIdle
+	}
 
 	_, err = adminClient.CreateQueue(context.Background(), queueName, &admin.CreateQueueOptions{
 		Properties: queueProperties,
@@ -204,4 +206,30 @@ func peekSingleMessageForTest(t *testing.T, receiver *Receiver) *ReceivedMessage
 	require.NoError(t, err)
 
 	return msg
+}
+
+func requireScheduledMessageDisappears(ctx context.Context, t *testing.T, receiver *Receiver, sequenceNumber int64) {
+	// this function will keep checking a particular sequence number until it's gone (ie, it was the last
+	// sequence number so it's obvious) _or_ we end up retrieving the next message instead since
+	// it auto-skips gaps.
+
+	for {
+		msgs, err := receiver.PeekMessages(ctx, 1, &PeekMessagesOptions{
+			FromSequenceNumber: &sequenceNumber,
+		})
+		require.NoError(t, err)
+
+		if len(msgs) == 0 {
+			// no message exists at the sequence number, and there was nowhere to jump to
+			return
+		}
+
+		if *msgs[0].SequenceNumber != sequenceNumber {
+			// the message is gone, we've been pushed to the next message after the "gap"
+			return
+		}
+
+		require.Equal(t, MessageStateScheduled, msgs[0].State)
+		time.Sleep(100 * time.Millisecond)
+	}
 }

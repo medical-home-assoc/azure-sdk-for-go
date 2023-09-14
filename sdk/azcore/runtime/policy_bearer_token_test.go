@@ -5,7 +5,6 @@ package runtime
 
 import (
 	"context"
-	"fmt"
 
 	"errors"
 	"net/http"
@@ -149,7 +148,7 @@ func TestBearerTokenPolicy_AuthZHandler(t *testing.T) {
 	challenge := "Scheme parameters..."
 	srv, close := mock.NewTLSServer(mock.WithTransformAllRequestsToTestServerUrl())
 	defer close()
-	srv.AppendResponse(mock.WithStatusCode(401), mock.WithHeader("WWW-Authenticate", challenge))
+	srv.AppendResponse(mock.WithStatusCode(401), mock.WithHeader(shared.HeaderWWWAuthenticate, challenge))
 	srv.AppendResponse(mock.WithStatusCode(200))
 
 	req, err := NewRequest(context.Background(), "GET", "https://localhost")
@@ -167,7 +166,7 @@ func TestBearerTokenPolicy_AuthZHandler(t *testing.T) {
 	handler.OnChallenge = func(r *policy.Request, res *http.Response, f func(policy.TokenRequestOptions) error) error {
 		require.Equal(t, req.Raw().URL, r.Raw().URL)
 		handler.onChallengeCalls++
-		require.Equal(t, challenge, res.Header.Get("WWW-Authenticate"))
+		require.Equal(t, challenge, res.Header.Get(shared.HeaderWWWAuthenticate))
 		return nil
 	}
 
@@ -185,7 +184,7 @@ func TestBearerTokenPolicy_AuthZHandler(t *testing.T) {
 func TestBearerTokenPolicy_AuthZHandlerErrors(t *testing.T) {
 	srv, close := mock.NewTLSServer(mock.WithTransformAllRequestsToTestServerUrl())
 	defer close()
-	srv.SetResponse(mock.WithStatusCode(401), mock.WithHeader("WWW-Authenticate", "..."))
+	srv.SetResponse(mock.WithStatusCode(401), mock.WithHeader(shared.HeaderWWWAuthenticate, "..."))
 
 	req, err := NewRequest(context.Background(), "GET", "https://localhost")
 	require.NoError(t, err)
@@ -205,13 +204,13 @@ func TestBearerTokenPolicy_AuthZHandlerErrors(t *testing.T) {
 	pl := newTestPipeline(&policy.ClientOptions{Transport: srv, PerRetryPolicies: []policy.Policy{b}})
 
 	// the policy should propagate the handler's errors, wrapping them to make them nonretriable, if necessary
-	msg := "something went wrong"
+	fatalErr := errors.New("something went wrong")
 	var nre errorinfo.NonRetriable
-	for i, e := range []error{fmt.Errorf(msg), &nonRetriableError{msg}} {
+	for i, e := range []error{fatalErr, shared.NonRetriableError(fatalErr)} {
 		handler.onReqErr = e
 		_, err = pl.Do(req)
 		require.ErrorAs(t, err, &nre)
-		require.EqualError(t, nre, msg)
+		require.EqualError(t, nre, fatalErr.Error())
 		// the policy shouldn't have sent a request, because OnRequest returned an error
 		require.Equal(t, i, srv.Requests())
 
@@ -219,7 +218,7 @@ func TestBearerTokenPolicy_AuthZHandlerErrors(t *testing.T) {
 		handler.onChallengeErr = e
 		_, err = pl.Do(req)
 		require.ErrorAs(t, err, &nre)
-		require.EqualError(t, nre, msg)
+		require.EqualError(t, nre, fatalErr.Error())
 		handler.onChallengeErr = nil
 		// the policy should have sent one request, because OnRequest returned nil but OnChallenge returned an error
 		require.Equal(t, i+1, srv.Requests())

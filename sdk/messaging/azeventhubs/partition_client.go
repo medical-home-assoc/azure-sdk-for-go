@@ -14,19 +14,23 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azeventhubs/internal"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azeventhubs/internal/amqpwrap"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azeventhubs/internal/go-amqp"
+	"github.com/Azure/go-amqp"
 )
 
 // DefaultConsumerGroup is the name of the default consumer group in the Event Hubs service.
 const DefaultConsumerGroup = "$Default"
 
-const defaultPrefetchSize = uint32(300)
-const defaultMaxCreditSize = uint32(2048)
+const defaultPrefetchSize = int32(300)
+
+// defaultLinkRxBuffer is the maximum number of transfer frames we can handle
+// on the Receiver. This matches the current default window size that go-amqp
+// uses for sessions.
+const defaultMaxCreditSize = uint32(5000)
 
 // StartPosition indicates the position to start receiving events within a partition.
 // The default position is Latest.
 //
-// You can set this in the options for ConsumerClient.
+// You can set this in the options for [ConsumerClient.NewPartitionClient].
 type StartPosition struct {
 	// Offset will start the consumer after the specified offset. Can be exclusive
 	// or inclusive, based on the Inclusive property.
@@ -57,16 +61,15 @@ type StartPosition struct {
 //
 // This type is instantiated from the [ConsumerClient] type, using [ConsumerClient.NewPartitionClient].
 type PartitionClient struct {
-	retryOptions  RetryOptions
-	eventHub      string
-	consumerGroup string
-	partitionID   string
-	ownerLevel    *int64
-	prefetch      int32
-
+	consumerGroup    string
+	eventHub         string
+	instanceID       string
+	links            internal.LinksForPartitionClient[amqpwrap.AMQPReceiverCloser]
 	offsetExpression string
-
-	links internal.LinksForPartitionClient[amqpwrap.AMQPReceiverCloser]
+	ownerLevel       *int64
+	partitionID      string
+	prefetch         int32
+	retryOptions     RetryOptions
 }
 
 // ReceiveEventsOptions contains optional parameters for the ReceiveEvents function
@@ -100,18 +103,26 @@ func (pc *PartitionClient) ReceiveEvents(ctx context.Context, count int, options
 
 	prefetchDisabled := pc.prefetch < 0
 
+	if count <= 0 {
+		return nil, internal.NewErrNonRetriable("count should be greater than 0")
+	}
+
+	if prefetchDisabled && count > int(defaultMaxCreditSize) {
+		return nil, internal.NewErrNonRetriable(fmt.Sprintf("count cannot exceed %d", defaultMaxCreditSize))
+	}
+
 	err := pc.links.Retry(ctx, EventConsumer, "ReceiveEvents", pc.partitionID, pc.retryOptions, func(ctx context.Context, lwid internal.LinkWithID[amqpwrap.AMQPReceiverCloser]) error {
 		events = nil
 
 		if prefetchDisabled {
-			remainingCredits := lwid.Link.Credits()
+			remainingCredits := lwid.Link().Credits()
 
 			if count > int(remainingCredits) {
 				newCredits := uint32(count) - remainingCredits
 
 				log.Writef(EventConsumer, "(%s) Have %d outstanding credit, only issuing %d credits", lwid.String(), remainingCredits, newCredits)
 
-				if err := lwid.Link.IssueCredit(newCredits); err != nil {
+				if err := lwid.Link().IssueCredit(newCredits); err != nil {
 					log.Writef(EventConsumer, "(%s) Error when issuing credits: %s", lwid.String(), err)
 					return err
 				}
@@ -119,7 +130,7 @@ func (pc *PartitionClient) ReceiveEvents(ctx context.Context, count int, options
 		}
 
 		for {
-			amqpMessage, err := lwid.Link.Receive(ctx)
+			amqpMessage, err := lwid.Link().Receive(ctx, nil)
 
 			if internal.IsOwnershipLostError(err) {
 				log.Writef(EventConsumer, "(%s) Error, link ownership lost: %s", lwid.String(), err)
@@ -128,7 +139,7 @@ func (pc *PartitionClient) ReceiveEvents(ctx context.Context, count int, options
 			}
 
 			if err != nil {
-				prefetched := getAllPrefetched(lwid.Link, count-len(events))
+				prefetched := getAllPrefetched(lwid.Link(), count-len(events))
 
 				for _, amqpMsg := range prefetched {
 					re, err := newReceivedEventData(amqpMsg)
@@ -173,7 +184,7 @@ func (pc *PartitionClient) ReceiveEvents(ctx context.Context, count int, options
 	numEvents := len(events)
 	lastSequenceNumber := events[numEvents-1].SequenceNumber
 
-	pc.offsetExpression = formatOffsetExpressionForSequence(">", lastSequenceNumber)
+	pc.offsetExpression = formatStartExpressionForSequence(">", lastSequenceNumber)
 	log.Writef(EventConsumer, "%d Events received, moving sequence to %d", numEvents, lastSequenceNumber)
 	return events, nil
 }
@@ -191,26 +202,30 @@ func (pc *PartitionClient) getEntityPath(partitionID string) string {
 	return fmt.Sprintf("%s/ConsumerGroups/%s/Partitions/%s", pc.eventHub, pc.consumerGroup, partitionID)
 }
 
-func (pc *PartitionClient) newEventHubConsumerLink(ctx context.Context, session amqpwrap.AMQPSession, entityPath string) (internal.AMQPReceiverCloser, error) {
-	var props map[string]interface{}
+func (pc *PartitionClient) newEventHubConsumerLink(ctx context.Context, session amqpwrap.AMQPSession, entityPath string, partitionID string) (internal.AMQPReceiverCloser, error) {
+	props := map[string]any{
+		// this lets Event Hubs return error messages that identify which Receiver stole ownership (and other things) within
+		// error messages.
+		// Ex: (ownershiplost): link detached, reason: *Error{Condition: amqp:link:stolen, Description: New receiver 'EventHubConsumerClientTestID-Interloper' with higher epoch of '1' is created hence current receiver 'EventHubConsumerClientTestID' with epoch '0' is getting disconnected. If you are recreating the receiver, make sure a higher epoch is used. TrackingId:8031553f0000a5060009a59b63f517a0_G4_B22, SystemTracker:riparkdev:eventhub:tests~10922|$default, Timestamp:2023-02-21T19:12:41, Info: map[]}
+		"com.microsoft:receiver-name": pc.instanceID,
+	}
 
 	if pc.ownerLevel != nil {
-		props = map[string]interface{}{
-			"com.microsoft:epoch": *pc.ownerLevel,
-		}
+		props["com.microsoft:epoch"] = *pc.ownerLevel
 	}
 
 	receiverOptions := &amqp.ReceiverOptions{
-		SettlementMode: to.Ptr(amqp.ModeFirst),
+		SettlementMode: to.Ptr(amqp.ReceiverSettleModeFirst),
 		Filters: []amqp.LinkFilter{
-			amqp.LinkFilterSelector(pc.offsetExpression),
+			amqp.NewSelectorFilter(pc.offsetExpression),
 		},
-		Properties: props,
+		Properties:    props,
+		TargetAddress: pc.instanceID,
 	}
 
 	if pc.prefetch > 0 {
 		log.Writef(EventConsumer, "Enabling prefetch with %d credits", pc.prefetch)
-		receiverOptions.Credit = uint32(pc.prefetch)
+		receiverOptions.Credit = pc.prefetch
 	} else if pc.prefetch == 0 {
 		log.Writef(EventConsumer, "Enabling prefetch with %d credits", defaultPrefetchSize)
 		receiverOptions.Credit = defaultPrefetchSize
@@ -218,11 +233,18 @@ func (pc *PartitionClient) newEventHubConsumerLink(ctx context.Context, session 
 		// prefetch is disabled, enable manual credits and enable
 		// a reasonable default max for the buffer.
 		log.Writef(EventConsumer, "Disabling prefetch")
-		receiverOptions.ManualCredits = true
-		receiverOptions.Credit = defaultMaxCreditSize
+		receiverOptions.Credit = -1
 	}
 
-	receiver, err := session.NewReceiver(ctx, entityPath, receiverOptions)
+	log.Writef(EventConsumer, "Creating receiver:\n  source:%s\n  instanceID: %s\n  owner level: %d\n  offset: %s\n  manual: %v\n  prefetch: %d",
+		entityPath,
+		pc.instanceID,
+		pc.ownerLevel,
+		pc.offsetExpression,
+		receiverOptions.Credit == -1,
+		pc.prefetch)
+
+	receiver, err := session.NewReceiver(ctx, entityPath, partitionID, receiverOptions)
 
 	if err != nil {
 		return nil, err
@@ -240,12 +262,11 @@ func (pc *PartitionClient) init(ctx context.Context) error {
 type partitionClientArgs struct {
 	namespace internal.NamespaceForAMQPLinks
 
-	eventHub    string
-	partitionID string
-
 	consumerGroup string
-
-	retryOptions RetryOptions
+	eventHub      string
+	instanceID    string
+	partitionID   string
+	retryOptions  RetryOptions
 }
 
 func newPartitionClient(args partitionClientArgs, options *PartitionClientOptions) (*PartitionClient, error) {
@@ -253,20 +274,26 @@ func newPartitionClient(args partitionClientArgs, options *PartitionClientOption
 		options = &PartitionClientOptions{}
 	}
 
-	offsetExpr, err := getOffsetExpression(options.StartPosition)
+	offsetExpr, err := getStartExpression(options.StartPosition)
 
 	if err != nil {
 		return nil, err
 	}
 
+	if options.Prefetch > int32(defaultMaxCreditSize) {
+		// don't allow them to set the prefetch above the session window size.
+		return nil, internal.NewErrNonRetriable(fmt.Sprintf("options.Prefetch cannot exceed %d", defaultMaxCreditSize))
+	}
+
 	client := &PartitionClient{
-		eventHub:         args.eventHub,
-		partitionID:      args.partitionID,
-		ownerLevel:       options.OwnerLevel,
 		consumerGroup:    args.consumerGroup,
+		eventHub:         args.eventHub,
 		offsetExpression: offsetExpr,
+		ownerLevel:       options.OwnerLevel,
+		partitionID:      args.partitionID,
 		prefetch:         options.Prefetch,
 		retryOptions:     args.retryOptions,
+		instanceID:       args.instanceID,
 	}
 
 	client.links = internal.NewLinks(args.namespace, fmt.Sprintf("%s/$management", client.eventHub), client.getEntityPath, client.newEventHubConsumerLink)
@@ -290,11 +317,11 @@ func getAllPrefetched(receiver amqpwrap.AMQPReceiver, max int) []*amqp.Message {
 	return messages
 }
 
-func getOffsetExpression(startPosition StartPosition) (string, error) {
-	lt := ">"
+func getStartExpression(startPosition StartPosition) (string, error) {
+	gt := ">"
 
 	if startPosition.Inclusive {
-		lt = ">="
+		gt = ">="
 	}
 
 	var errMultipleFieldsSet = errors.New("only a single start point can be set: Earliest, EnqueuedTime, Latest, Offset, or SequenceNumber")
@@ -303,7 +330,7 @@ func getOffsetExpression(startPosition StartPosition) (string, error) {
 
 	if startPosition.EnqueuedTime != nil {
 		// time-based, non-inclusive
-		offsetExpr = fmt.Sprintf("amqp.annotation.x-opt-enqueued-time %s '%d'", lt, startPosition.EnqueuedTime.UnixMilli())
+		offsetExpr = fmt.Sprintf("amqp.annotation.x-opt-enqueued-time %s '%d'", gt, startPosition.EnqueuedTime.UnixMilli())
 	}
 
 	if startPosition.Offset != nil {
@@ -313,7 +340,7 @@ func getOffsetExpression(startPosition StartPosition) (string, error) {
 			return "", errMultipleFieldsSet
 		}
 
-		offsetExpr = fmt.Sprintf("amqp.annotation.x-opt-offset %s '%d'", lt, *startPosition.Offset)
+		offsetExpr = fmt.Sprintf("amqp.annotation.x-opt-offset %s '%d'", gt, *startPosition.Offset)
 	}
 
 	if startPosition.Latest != nil && *startPosition.Latest {
@@ -321,7 +348,7 @@ func getOffsetExpression(startPosition StartPosition) (string, error) {
 			return "", errMultipleFieldsSet
 		}
 
-		offsetExpr = "amqp.annotation.x-opt-offset > '@latest'"
+		offsetExpr = fmt.Sprintf("amqp.annotation.x-opt-offset %s '@latest'", gt)
 	}
 
 	if startPosition.SequenceNumber != nil {
@@ -329,7 +356,7 @@ func getOffsetExpression(startPosition StartPosition) (string, error) {
 			return "", errMultipleFieldsSet
 		}
 
-		offsetExpr = formatOffsetExpressionForSequence(lt, *startPosition.SequenceNumber)
+		offsetExpr = formatStartExpressionForSequence(gt, *startPosition.SequenceNumber)
 	}
 
 	if startPosition.Earliest != nil && *startPosition.Earliest {
@@ -348,6 +375,6 @@ func getOffsetExpression(startPosition StartPosition) (string, error) {
 	return "amqp.annotation.x-opt-offset > '@latest'", nil
 }
 
-func formatOffsetExpressionForSequence(op string, sequenceNumber int64) string {
+func formatStartExpressionForSequence(op string, sequenceNumber int64) string {
 	return fmt.Sprintf("amqp.annotation.x-opt-sequence-number %s '%d'", op, sequenceNumber)
 }

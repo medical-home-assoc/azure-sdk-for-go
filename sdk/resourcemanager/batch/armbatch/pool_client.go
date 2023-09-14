@@ -14,8 +14,6 @@ import (
 	"errors"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
-	armruntime "github.com/Azure/azure-sdk-for-go/sdk/azcore/arm/runtime"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"net/http"
@@ -27,49 +25,41 @@ import (
 // PoolClient contains the methods for the Pool group.
 // Don't use this type directly, use NewPoolClient() instead.
 type PoolClient struct {
-	host           string
+	internal       *arm.Client
 	subscriptionID string
-	pl             runtime.Pipeline
 }
 
 // NewPoolClient creates a new instance of PoolClient with the specified values.
-// subscriptionID - The Azure subscription ID. This is a GUID-formatted string (e.g. 00000000-0000-0000-0000-000000000000)
-// credential - used to authorize requests. Usually a credential from azidentity.
-// options - pass nil to accept the default values.
+//   - subscriptionID - The Azure subscription ID. This is a GUID-formatted string (e.g. 00000000-0000-0000-0000-000000000000)
+//   - credential - used to authorize requests. Usually a credential from azidentity.
+//   - options - pass nil to accept the default values.
 func NewPoolClient(subscriptionID string, credential azcore.TokenCredential, options *arm.ClientOptions) (*PoolClient, error) {
-	if options == nil {
-		options = &arm.ClientOptions{}
-	}
-	ep := cloud.AzurePublic.Services[cloud.ResourceManager].Endpoint
-	if c, ok := options.Cloud.Services[cloud.ResourceManager]; ok {
-		ep = c.Endpoint
-	}
-	pl, err := armruntime.NewPipeline(moduleName, moduleVersion, credential, runtime.PipelineOptions{}, options)
+	cl, err := arm.NewClient(moduleName+".PoolClient", moduleVersion, credential, options)
 	if err != nil {
 		return nil, err
 	}
 	client := &PoolClient{
 		subscriptionID: subscriptionID,
-		host:           ep,
-		pl:             pl,
+		internal:       cl,
 	}
 	return client, nil
 }
 
 // Create - Creates a new pool inside the specified account.
 // If the operation fails it returns an *azcore.ResponseError type.
-// Generated from API version 2022-10-01
-// resourceGroupName - The name of the resource group that contains the Batch account.
-// accountName - The name of the Batch account.
-// poolName - The pool name. This must be unique within the account.
-// parameters - Additional parameters for pool creation.
-// options - PoolClientCreateOptions contains the optional parameters for the PoolClient.Create method.
+//
+// Generated from API version 2023-05-01
+//   - resourceGroupName - The name of the resource group that contains the Batch account.
+//   - accountName - The name of the Batch account.
+//   - poolName - The pool name. This must be unique within the account.
+//   - parameters - Additional parameters for pool creation.
+//   - options - PoolClientCreateOptions contains the optional parameters for the PoolClient.Create method.
 func (client *PoolClient) Create(ctx context.Context, resourceGroupName string, accountName string, poolName string, parameters Pool, options *PoolClientCreateOptions) (PoolClientCreateResponse, error) {
 	req, err := client.createCreateRequest(ctx, resourceGroupName, accountName, poolName, parameters, options)
 	if err != nil {
 		return PoolClientCreateResponse{}, err
 	}
-	resp, err := client.pl.Do(req)
+	resp, err := client.internal.Pipeline().Do(req)
 	if err != nil {
 		return PoolClientCreateResponse{}, err
 	}
@@ -98,12 +88,12 @@ func (client *PoolClient) createCreateRequest(ctx context.Context, resourceGroup
 		return nil, errors.New("parameter client.subscriptionID cannot be empty")
 	}
 	urlPath = strings.ReplaceAll(urlPath, "{subscriptionId}", url.PathEscape(client.subscriptionID))
-	req, err := runtime.NewRequest(ctx, http.MethodPut, runtime.JoinPaths(client.host, urlPath))
+	req, err := runtime.NewRequest(ctx, http.MethodPut, runtime.JoinPaths(client.internal.Endpoint(), urlPath))
 	if err != nil {
 		return nil, err
 	}
 	reqQP := req.Raw().URL.Query()
-	reqQP.Set("api-version", "2022-10-01")
+	reqQP.Set("api-version", "2023-05-01")
 	req.Raw().URL.RawQuery = reqQP.Encode()
 	if options != nil && options.IfMatch != nil {
 		req.Raw().Header["If-Match"] = []string{*options.IfMatch}
@@ -129,34 +119,36 @@ func (client *PoolClient) createHandleResponse(resp *http.Response) (PoolClientC
 
 // BeginDelete - Deletes the specified pool.
 // If the operation fails it returns an *azcore.ResponseError type.
-// Generated from API version 2022-10-01
-// resourceGroupName - The name of the resource group that contains the Batch account.
-// accountName - The name of the Batch account.
-// poolName - The pool name. This must be unique within the account.
-// options - PoolClientBeginDeleteOptions contains the optional parameters for the PoolClient.BeginDelete method.
+//
+// Generated from API version 2023-05-01
+//   - resourceGroupName - The name of the resource group that contains the Batch account.
+//   - accountName - The name of the Batch account.
+//   - poolName - The pool name. This must be unique within the account.
+//   - options - PoolClientBeginDeleteOptions contains the optional parameters for the PoolClient.BeginDelete method.
 func (client *PoolClient) BeginDelete(ctx context.Context, resourceGroupName string, accountName string, poolName string, options *PoolClientBeginDeleteOptions) (*runtime.Poller[PoolClientDeleteResponse], error) {
 	if options == nil || options.ResumeToken == "" {
 		resp, err := client.deleteOperation(ctx, resourceGroupName, accountName, poolName, options)
 		if err != nil {
 			return nil, err
 		}
-		return runtime.NewPoller(resp, client.pl, &runtime.NewPollerOptions[PoolClientDeleteResponse]{
+		return runtime.NewPoller(resp, client.internal.Pipeline(), &runtime.NewPollerOptions[PoolClientDeleteResponse]{
 			FinalStateVia: runtime.FinalStateViaLocation,
 		})
 	} else {
-		return runtime.NewPollerFromResumeToken[PoolClientDeleteResponse](options.ResumeToken, client.pl, nil)
+		return runtime.NewPollerFromResumeToken[PoolClientDeleteResponse](options.ResumeToken, client.internal.Pipeline(), nil)
 	}
 }
 
 // Delete - Deletes the specified pool.
 // If the operation fails it returns an *azcore.ResponseError type.
-// Generated from API version 2022-10-01
+//
+// Generated from API version 2023-05-01
 func (client *PoolClient) deleteOperation(ctx context.Context, resourceGroupName string, accountName string, poolName string, options *PoolClientBeginDeleteOptions) (*http.Response, error) {
 	req, err := client.deleteCreateRequest(ctx, resourceGroupName, accountName, poolName, options)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := client.pl.Do(req)
+	resp, err := client.internal.Pipeline().Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -185,12 +177,12 @@ func (client *PoolClient) deleteCreateRequest(ctx context.Context, resourceGroup
 		return nil, errors.New("parameter client.subscriptionID cannot be empty")
 	}
 	urlPath = strings.ReplaceAll(urlPath, "{subscriptionId}", url.PathEscape(client.subscriptionID))
-	req, err := runtime.NewRequest(ctx, http.MethodDelete, runtime.JoinPaths(client.host, urlPath))
+	req, err := runtime.NewRequest(ctx, http.MethodDelete, runtime.JoinPaths(client.internal.Endpoint(), urlPath))
 	if err != nil {
 		return nil, err
 	}
 	reqQP := req.Raw().URL.Query()
-	reqQP.Set("api-version", "2022-10-01")
+	reqQP.Set("api-version", "2023-05-01")
 	req.Raw().URL.RawQuery = reqQP.Encode()
 	req.Raw().Header["Accept"] = []string{"application/json"}
 	return req, nil
@@ -198,17 +190,18 @@ func (client *PoolClient) deleteCreateRequest(ctx context.Context, resourceGroup
 
 // DisableAutoScale - Disables automatic scaling for a pool.
 // If the operation fails it returns an *azcore.ResponseError type.
-// Generated from API version 2022-10-01
-// resourceGroupName - The name of the resource group that contains the Batch account.
-// accountName - The name of the Batch account.
-// poolName - The pool name. This must be unique within the account.
-// options - PoolClientDisableAutoScaleOptions contains the optional parameters for the PoolClient.DisableAutoScale method.
+//
+// Generated from API version 2023-05-01
+//   - resourceGroupName - The name of the resource group that contains the Batch account.
+//   - accountName - The name of the Batch account.
+//   - poolName - The pool name. This must be unique within the account.
+//   - options - PoolClientDisableAutoScaleOptions contains the optional parameters for the PoolClient.DisableAutoScale method.
 func (client *PoolClient) DisableAutoScale(ctx context.Context, resourceGroupName string, accountName string, poolName string, options *PoolClientDisableAutoScaleOptions) (PoolClientDisableAutoScaleResponse, error) {
 	req, err := client.disableAutoScaleCreateRequest(ctx, resourceGroupName, accountName, poolName, options)
 	if err != nil {
 		return PoolClientDisableAutoScaleResponse{}, err
 	}
-	resp, err := client.pl.Do(req)
+	resp, err := client.internal.Pipeline().Do(req)
 	if err != nil {
 		return PoolClientDisableAutoScaleResponse{}, err
 	}
@@ -237,12 +230,12 @@ func (client *PoolClient) disableAutoScaleCreateRequest(ctx context.Context, res
 		return nil, errors.New("parameter client.subscriptionID cannot be empty")
 	}
 	urlPath = strings.ReplaceAll(urlPath, "{subscriptionId}", url.PathEscape(client.subscriptionID))
-	req, err := runtime.NewRequest(ctx, http.MethodPost, runtime.JoinPaths(client.host, urlPath))
+	req, err := runtime.NewRequest(ctx, http.MethodPost, runtime.JoinPaths(client.internal.Endpoint(), urlPath))
 	if err != nil {
 		return nil, err
 	}
 	reqQP := req.Raw().URL.Query()
-	reqQP.Set("api-version", "2022-10-01")
+	reqQP.Set("api-version", "2023-05-01")
 	req.Raw().URL.RawQuery = reqQP.Encode()
 	req.Raw().Header["Accept"] = []string{"application/json"}
 	return req, nil
@@ -262,17 +255,18 @@ func (client *PoolClient) disableAutoScaleHandleResponse(resp *http.Response) (P
 
 // Get - Gets information about the specified pool.
 // If the operation fails it returns an *azcore.ResponseError type.
-// Generated from API version 2022-10-01
-// resourceGroupName - The name of the resource group that contains the Batch account.
-// accountName - The name of the Batch account.
-// poolName - The pool name. This must be unique within the account.
-// options - PoolClientGetOptions contains the optional parameters for the PoolClient.Get method.
+//
+// Generated from API version 2023-05-01
+//   - resourceGroupName - The name of the resource group that contains the Batch account.
+//   - accountName - The name of the Batch account.
+//   - poolName - The pool name. This must be unique within the account.
+//   - options - PoolClientGetOptions contains the optional parameters for the PoolClient.Get method.
 func (client *PoolClient) Get(ctx context.Context, resourceGroupName string, accountName string, poolName string, options *PoolClientGetOptions) (PoolClientGetResponse, error) {
 	req, err := client.getCreateRequest(ctx, resourceGroupName, accountName, poolName, options)
 	if err != nil {
 		return PoolClientGetResponse{}, err
 	}
-	resp, err := client.pl.Do(req)
+	resp, err := client.internal.Pipeline().Do(req)
 	if err != nil {
 		return PoolClientGetResponse{}, err
 	}
@@ -301,12 +295,12 @@ func (client *PoolClient) getCreateRequest(ctx context.Context, resourceGroupNam
 		return nil, errors.New("parameter client.subscriptionID cannot be empty")
 	}
 	urlPath = strings.ReplaceAll(urlPath, "{subscriptionId}", url.PathEscape(client.subscriptionID))
-	req, err := runtime.NewRequest(ctx, http.MethodGet, runtime.JoinPaths(client.host, urlPath))
+	req, err := runtime.NewRequest(ctx, http.MethodGet, runtime.JoinPaths(client.internal.Endpoint(), urlPath))
 	if err != nil {
 		return nil, err
 	}
 	reqQP := req.Raw().URL.Query()
-	reqQP.Set("api-version", "2022-10-01")
+	reqQP.Set("api-version", "2023-05-01")
 	req.Raw().URL.RawQuery = reqQP.Encode()
 	req.Raw().Header["Accept"] = []string{"application/json"}
 	return req, nil
@@ -325,10 +319,12 @@ func (client *PoolClient) getHandleResponse(resp *http.Response) (PoolClientGetR
 }
 
 // NewListByBatchAccountPager - Lists all of the pools in the specified account.
-// Generated from API version 2022-10-01
-// resourceGroupName - The name of the resource group that contains the Batch account.
-// accountName - The name of the Batch account.
-// options - PoolClientListByBatchAccountOptions contains the optional parameters for the PoolClient.ListByBatchAccount method.
+//
+// Generated from API version 2023-05-01
+//   - resourceGroupName - The name of the resource group that contains the Batch account.
+//   - accountName - The name of the Batch account.
+//   - options - PoolClientListByBatchAccountOptions contains the optional parameters for the PoolClient.NewListByBatchAccountPager
+//     method.
 func (client *PoolClient) NewListByBatchAccountPager(resourceGroupName string, accountName string, options *PoolClientListByBatchAccountOptions) *runtime.Pager[PoolClientListByBatchAccountResponse] {
 	return runtime.NewPager(runtime.PagingHandler[PoolClientListByBatchAccountResponse]{
 		More: func(page PoolClientListByBatchAccountResponse) bool {
@@ -345,7 +341,7 @@ func (client *PoolClient) NewListByBatchAccountPager(resourceGroupName string, a
 			if err != nil {
 				return PoolClientListByBatchAccountResponse{}, err
 			}
-			resp, err := client.pl.Do(req)
+			resp, err := client.internal.Pipeline().Do(req)
 			if err != nil {
 				return PoolClientListByBatchAccountResponse{}, err
 			}
@@ -372,7 +368,7 @@ func (client *PoolClient) listByBatchAccountCreateRequest(ctx context.Context, r
 		return nil, errors.New("parameter client.subscriptionID cannot be empty")
 	}
 	urlPath = strings.ReplaceAll(urlPath, "{subscriptionId}", url.PathEscape(client.subscriptionID))
-	req, err := runtime.NewRequest(ctx, http.MethodGet, runtime.JoinPaths(client.host, urlPath))
+	req, err := runtime.NewRequest(ctx, http.MethodGet, runtime.JoinPaths(client.internal.Endpoint(), urlPath))
 	if err != nil {
 		return nil, err
 	}
@@ -386,7 +382,7 @@ func (client *PoolClient) listByBatchAccountCreateRequest(ctx context.Context, r
 	if options != nil && options.Filter != nil {
 		reqQP.Set("$filter", *options.Filter)
 	}
-	reqQP.Set("api-version", "2022-10-01")
+	reqQP.Set("api-version", "2023-05-01")
 	req.Raw().URL.RawQuery = reqQP.Encode()
 	req.Raw().Header["Accept"] = []string{"application/json"}
 	return req, nil
@@ -407,17 +403,18 @@ func (client *PoolClient) listByBatchAccountHandleResponse(resp *http.Response) 
 // state changes first to stopping and then to steady. A resize operation need
 // not be an explicit resize pool request; this API can also be used to halt the initial sizing of the pool when it is created.
 // If the operation fails it returns an *azcore.ResponseError type.
-// Generated from API version 2022-10-01
-// resourceGroupName - The name of the resource group that contains the Batch account.
-// accountName - The name of the Batch account.
-// poolName - The pool name. This must be unique within the account.
-// options - PoolClientStopResizeOptions contains the optional parameters for the PoolClient.StopResize method.
+//
+// Generated from API version 2023-05-01
+//   - resourceGroupName - The name of the resource group that contains the Batch account.
+//   - accountName - The name of the Batch account.
+//   - poolName - The pool name. This must be unique within the account.
+//   - options - PoolClientStopResizeOptions contains the optional parameters for the PoolClient.StopResize method.
 func (client *PoolClient) StopResize(ctx context.Context, resourceGroupName string, accountName string, poolName string, options *PoolClientStopResizeOptions) (PoolClientStopResizeResponse, error) {
 	req, err := client.stopResizeCreateRequest(ctx, resourceGroupName, accountName, poolName, options)
 	if err != nil {
 		return PoolClientStopResizeResponse{}, err
 	}
-	resp, err := client.pl.Do(req)
+	resp, err := client.internal.Pipeline().Do(req)
 	if err != nil {
 		return PoolClientStopResizeResponse{}, err
 	}
@@ -446,12 +443,12 @@ func (client *PoolClient) stopResizeCreateRequest(ctx context.Context, resourceG
 		return nil, errors.New("parameter client.subscriptionID cannot be empty")
 	}
 	urlPath = strings.ReplaceAll(urlPath, "{subscriptionId}", url.PathEscape(client.subscriptionID))
-	req, err := runtime.NewRequest(ctx, http.MethodPost, runtime.JoinPaths(client.host, urlPath))
+	req, err := runtime.NewRequest(ctx, http.MethodPost, runtime.JoinPaths(client.internal.Endpoint(), urlPath))
 	if err != nil {
 		return nil, err
 	}
 	reqQP := req.Raw().URL.Query()
-	reqQP.Set("api-version", "2022-10-01")
+	reqQP.Set("api-version", "2023-05-01")
 	req.Raw().URL.RawQuery = reqQP.Encode()
 	req.Raw().Header["Accept"] = []string{"application/json"}
 	return req, nil
@@ -471,19 +468,20 @@ func (client *PoolClient) stopResizeHandleResponse(resp *http.Response) (PoolCli
 
 // Update - Updates the properties of an existing pool.
 // If the operation fails it returns an *azcore.ResponseError type.
-// Generated from API version 2022-10-01
-// resourceGroupName - The name of the resource group that contains the Batch account.
-// accountName - The name of the Batch account.
-// poolName - The pool name. This must be unique within the account.
-// parameters - Pool properties that should be updated. Properties that are supplied will be updated, any property not supplied
-// will be unchanged.
-// options - PoolClientUpdateOptions contains the optional parameters for the PoolClient.Update method.
+//
+// Generated from API version 2023-05-01
+//   - resourceGroupName - The name of the resource group that contains the Batch account.
+//   - accountName - The name of the Batch account.
+//   - poolName - The pool name. This must be unique within the account.
+//   - parameters - Pool properties that should be updated. Properties that are supplied will be updated, any property not supplied
+//     will be unchanged.
+//   - options - PoolClientUpdateOptions contains the optional parameters for the PoolClient.Update method.
 func (client *PoolClient) Update(ctx context.Context, resourceGroupName string, accountName string, poolName string, parameters Pool, options *PoolClientUpdateOptions) (PoolClientUpdateResponse, error) {
 	req, err := client.updateCreateRequest(ctx, resourceGroupName, accountName, poolName, parameters, options)
 	if err != nil {
 		return PoolClientUpdateResponse{}, err
 	}
-	resp, err := client.pl.Do(req)
+	resp, err := client.internal.Pipeline().Do(req)
 	if err != nil {
 		return PoolClientUpdateResponse{}, err
 	}
@@ -512,12 +510,12 @@ func (client *PoolClient) updateCreateRequest(ctx context.Context, resourceGroup
 		return nil, errors.New("parameter client.subscriptionID cannot be empty")
 	}
 	urlPath = strings.ReplaceAll(urlPath, "{subscriptionId}", url.PathEscape(client.subscriptionID))
-	req, err := runtime.NewRequest(ctx, http.MethodPatch, runtime.JoinPaths(client.host, urlPath))
+	req, err := runtime.NewRequest(ctx, http.MethodPatch, runtime.JoinPaths(client.internal.Endpoint(), urlPath))
 	if err != nil {
 		return nil, err
 	}
 	reqQP := req.Raw().URL.Query()
-	reqQP.Set("api-version", "2022-10-01")
+	reqQP.Set("api-version", "2023-05-01")
 	req.Raw().URL.RawQuery = reqQP.Encode()
 	if options != nil && options.IfMatch != nil {
 		req.Raw().Header["If-Match"] = []string{*options.IfMatch}

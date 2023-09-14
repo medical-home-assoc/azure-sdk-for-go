@@ -5,9 +5,11 @@ parameters:
 
 stages:
   - stage: CheckRelease
+    variables:
+      - template: /eng/pipelines/templates/variables/globals.yml
     displayName: 'Check Release: ${{ parameters.ServiceDirectory }}'
     dependsOn: ${{ parameters.DependsOn }}
-    condition: and(succeeded(), ne(variables['SetDevVersion'], 'true'), ne(variables['Skip.Release'], 'true'), ne(variables['Build.Repository.Name'], 'Azure/azure-sdk-for-go-pr'))
+    condition: and(succeeded(), ne(variables['SetDevVersion'], 'true'), ne(variables['Skip.Release'], 'true'), ne(variables['Build.Repository.Name'], 'Azure/azure-sdk-for-go-pr'), ne(variables.UseAzcoreFromMain, 'true'))
     jobs:
       - job: CheckReleaseJob
         displayName: "Check whether need to release"
@@ -18,15 +20,24 @@ stages:
             name: Verify
             inputs:
               filePath: ./eng/scripts/Verify-NeedToRelease.ps1
-              arguments: >
-                -PackageName 'sdk/${{ parameters.ServiceDirectory }}'
-                -ServiceDirectory '${{ parameters.ServiceDirectory }}'
-                -repoId Azure/azure-sdk-for-go
-                -workingDirectory $(System.DefaultWorkingDirectory)
+              ${{ if startsWith(parameters.ServiceDirectory, '../') }}:
+                arguments: >
+                  -PackageName "${{replace(parameters.ServiceDirectory, '../', '')}}"
+                  -ServiceDirectory '${{ parameters.ServiceDirectory }}'
+                  -repoId Azure/azure-sdk-for-go
+                  -workingDirectory $(System.DefaultWorkingDirectory)
+              ${{ else }}:
+                arguments: >
+                  -PackageName 'sdk/${{ parameters.ServiceDirectory }}'
+                  -ServiceDirectory '${{ parameters.ServiceDirectory }}'
+                  -repoId Azure/azure-sdk-for-go
+                  -workingDirectory $(System.DefaultWorkingDirectory)
               pwsh: true
             env:
               GH_TOKEN: $(azuresdk-github-pat)
   - stage: Release
+    variables:
+      - template: /eng/pipelines/templates/variables/globals.yml
     displayName: 'Release: ${{ parameters.ServiceDirectory }}'
     dependsOn: CheckRelease
     condition: and(succeeded(), eq(dependencies.CheckRelease.outputs['CheckReleaseJob.Verify.NeedToRelease'], 'true'))
@@ -48,7 +59,10 @@ stages:
                 - template: /eng/common/pipelines/templates/steps/retain-run.yml
                 - template: /eng/common/pipelines/templates/steps/verify-changelog.yml
                   parameters:
-                    PackageName: 'sdk/${{ parameters.ServiceDirectory }}'
+                    ${{ if startsWith(parameters.ServiceDirectory, '../') }}:
+                      PackageName: "${{replace(parameters.ServiceDirectory, '../', '')}}"
+                    ${{ else }}:
+                      PackageName: 'sdk/${{parameters.ServiceDirectory}}'
                     ForRelease: true
                 - task: PowerShell@2
                   displayName: 'Verify no replace directives in go.mod file'
@@ -88,5 +102,4 @@ stages:
                       PRBranchName: increment-package-version-${{ parameters.ServiceDirectory }}-$(Build.BuildId)
                       CommitMsg: "Increment package version after release of ${{ parameters.ServiceDirectory }}"
                       PRTitle: "Increment version for ${{ parameters.ServiceDirectory }} releases"
-                      PRLabels: "auto-merge"
                       CloseAfterOpenForTesting: '${{ parameters.TestPipeline }}'

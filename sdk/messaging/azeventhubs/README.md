@@ -7,8 +7,6 @@ Use the client library `github.com/Azure/azure-sdk-for-go/sdk/messaging/azeventh
 - Send events to an event hub.
 - Consume events from an event hub.
 
-**NOTE**: This library is currently a beta. There may be breaking changes until it reaches semantic version `v1.0.0`.
-
 Key links:
 - [Source code][source]
 - [API Reference Documentation][godoc]
@@ -34,7 +32,7 @@ go get github.com/Azure/azure-sdk-for-go/sdk/messaging/azeventhubs
 
 ### Authenticate the client
 
-Event Hub clients are created using an Event Hub a credential from the [Azure Identity package][azure_identity_pkg], like [DefaultAzureCredential][default_azure_credential].
+Event Hub clients are created using a TokenCredential from the [Azure Identity package][azure_identity_pkg], like [DefaultAzureCredential][default_azure_credential].
 You can also create a client using a connection string.
 
 #### Using a service principal

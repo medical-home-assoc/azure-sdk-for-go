@@ -16,14 +16,19 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/recording"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/storage/armstorage"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/appendblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/stretchr/testify/require"
 )
@@ -45,11 +50,14 @@ const (
 	AccountNameEnvVar           = "AZURE_STORAGE_ACCOUNT_NAME"
 	AccountKeyEnvVar            = "AZURE_STORAGE_ACCOUNT_KEY"
 	DefaultEndpointSuffixEnvVar = "AZURE_STORAGE_ENDPOINT_SUFFIX"
+	SubscriptionID              = "SUBSCRIPTION_ID"
+	ResourceGroupName           = "RESOURCE_GROUP_NAME"
 )
 
 const (
 	FakeStorageAccount = "fakestorage"
 	FakeStorageURL     = "https://fakestorage.blob.core.windows.net"
+	FakeToken          = "faketoken"
 )
 
 var (
@@ -86,7 +94,7 @@ var SpecialCharBlobTagsMap = map[string]string{
 	"GO ":             ".Net",
 }
 
-func setClientOptions(t *testing.T, opts *azcore.ClientOptions) {
+func SetClientOptions(t *testing.T, opts *azcore.ClientOptions) {
 	opts.Logging.AllowedHeaders = append(opts.Logging.AllowedHeaders, "X-Request-Mismatch", "X-Request-Mismatch-Error")
 
 	transport, err := recording.NewRecordingHTTPClient(t, nil)
@@ -99,9 +107,9 @@ func GetClient(t *testing.T, accountType TestAccountType, options *azblob.Client
 		options = &azblob.ClientOptions{}
 	}
 
-	setClientOptions(t, &options.ClientOptions)
+	SetClientOptions(t, &options.ClientOptions)
 
-	cred, err := GetGenericCredential(accountType)
+	cred, err := GetGenericSharedKeyCredential(accountType)
 	if err != nil {
 		return nil, err
 	}
@@ -116,9 +124,9 @@ func GetServiceClient(t *testing.T, accountType TestAccountType, options *servic
 		options = &service.ClientOptions{}
 	}
 
-	setClientOptions(t, &options.ClientOptions)
+	SetClientOptions(t, &options.ClientOptions)
 
-	cred, err := GetGenericCredential(accountType)
+	cred, err := GetGenericSharedKeyCredential(accountType)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +136,36 @@ func GetServiceClient(t *testing.T, accountType TestAccountType, options *servic
 	return serviceClient, err
 }
 
-func GetAccountInfo(accountType TestAccountType) (string, string) {
+func GetServiceClientNoCredential(t *testing.T, sasUrl string, options *service.ClientOptions) (*service.Client, error) {
+	if options == nil {
+		options = &service.ClientOptions{}
+	}
+
+	SetClientOptions(t, &options.ClientOptions)
+
+	serviceClient, err := service.NewClientWithNoCredential(sasUrl, options)
+
+	return serviceClient, err
+}
+
+type FakeCredential struct {
+}
+
+func (c *FakeCredential) GetToken(ctx context.Context, opts policy.TokenRequestOptions) (azcore.AccessToken, error) {
+	return azcore.AccessToken{Token: FakeToken, ExpiresOn: time.Now().Add(time.Hour).UTC()}, nil
+}
+
+func GetGenericTokenCredential() (azcore.TokenCredential, error) {
+	if recording.GetRecordMode() == recording.PlaybackMode {
+		return &FakeCredential{}, nil
+	}
+	return azidentity.NewDefaultAzureCredential(nil)
+}
+
+func GetGenericAccountInfo(accountType TestAccountType) (string, string) {
+	if recording.GetRecordMode() == recording.PlaybackMode {
+		return FakeStorageAccount, "ZmFrZQ=="
+	}
 	accountNameEnvVar := string(accountType) + AccountNameEnvVar
 	accountKeyEnvVar := string(accountType) + AccountKeyEnvVar
 	accountName, _ := GetRequiredEnv(accountNameEnvVar)
@@ -136,40 +173,39 @@ func GetAccountInfo(accountType TestAccountType) (string, string) {
 	return accountName, accountKey
 }
 
-func GetGenericCredential(accountType TestAccountType) (*azblob.SharedKeyCredential, error) {
-	if recording.GetRecordMode() == recording.PlaybackMode {
-		return azblob.NewSharedKeyCredential(FakeStorageAccount, "ZmFrZQ==")
-	}
-
-	accountName, accountKey := GetAccountInfo(accountType)
+func GetGenericSharedKeyCredential(accountType TestAccountType) (*azblob.SharedKeyCredential, error) {
+	accountName, accountKey := GetGenericAccountInfo(accountType)
 	if accountName == "" || accountKey == "" {
 		return nil, errors.New(string(accountType) + AccountNameEnvVar + " and/or " + string(accountType) + AccountKeyEnvVar + " environment variables not specified.")
 	}
 	return azblob.NewSharedKeyCredential(accountName, accountKey)
 }
 
-func GetConnectionString(accountType TestAccountType) string {
-	accountName, accountKey := GetAccountInfo(accountType)
+func GetGenericConnectionString(accountType TestAccountType) (*string, error) {
+	accountName, accountKey := GetGenericAccountInfo(accountType)
+	if accountName == "" || accountKey == "" {
+		return nil, errors.New(string(accountType) + AccountNameEnvVar + " and/or " + string(accountType) + AccountKeyEnvVar + " environment variables not specified.")
+	}
 	connectionString := fmt.Sprintf("DefaultEndpointsProtocol=https;AccountName=%s;AccountKey=%s;EndpointSuffix=core.windows.net/",
 		accountName, accountKey)
-	return connectionString
+	return &connectionString, nil
 }
 
 func GetServiceClientFromConnectionString(t *testing.T, accountType TestAccountType, options *service.ClientOptions) (*service.Client, error) {
 	if options == nil {
 		options = &service.ClientOptions{}
 	}
+	SetClientOptions(t, &options.ClientOptions)
 
 	transport, err := recording.NewRecordingHTTPClient(t, nil)
 	require.NoError(t, err)
 	options.Transport = transport
 
-	if recording.GetRecordMode() == recording.PlaybackMode {
-		return service.NewClientWithNoCredential(FakeStorageURL, options)
+	cred, err := GetGenericConnectionString(accountType)
+	if err != nil {
+		return nil, err
 	}
-
-	connectionString := GetConnectionString(accountType)
-	svcClient, err := service.NewClientFromConnectionString(connectionString, options)
+	svcClient, err := service.NewClientFromConnectionString(*cred, options)
 	return svcClient, err
 }
 
@@ -181,14 +217,14 @@ func CreateNewContainer(ctx context.Context, _require *require.Assertions, conta
 	containerClient := GetContainerClient(containerName, serviceClient)
 
 	_, err := containerClient.Create(ctx, nil)
-	_require.Nil(err)
+	_require.NoError(err)
 	// _require.Equal(cResp.RawResponse.StatusCode, 201)
 	return containerClient
 }
 
 func DeleteContainer(ctx context.Context, _require *require.Assertions, containerClient *container.Client) {
 	_, err := containerClient.Delete(ctx, nil)
-	_require.Nil(err)
+	_require.NoError(err)
 }
 
 func GetBlobClient(blockBlobName string, containerClient *container.Client) *blob.Client {
@@ -201,6 +237,14 @@ func CreateNewBlobs(ctx context.Context, _require *require.Assertions, blobNames
 	}
 }
 
+func CreateNewBlobsListTier(ctx context.Context, _require *require.Assertions, blobNames []string, containerClient *container.Client, tier *blob.AccessTier) {
+	for _, blobName := range blobNames {
+		bbClient := CreateNewBlockBlob(ctx, _require, blobName, containerClient)
+		_, err := bbClient.SetTier(ctx, *tier, nil)
+		_require.NoError(err)
+	}
+}
+
 func GetBlockBlobClient(blockBlobName string, containerClient *container.Client) *blockblob.Client {
 	return containerClient.NewBlockBlobClient(blockBlobName)
 }
@@ -209,7 +253,7 @@ func CreateNewBlockBlob(ctx context.Context, _require *require.Assertions, block
 	bbClient := GetBlockBlobClient(blockBlobName, containerClient)
 
 	_, err := bbClient.Upload(ctx, streaming.NopCloser(strings.NewReader(BlockBlobDefaultData)), nil)
-	_require.Nil(err)
+	_require.NoError(err)
 	// _require.Equal(cResp.RawResponse.StatusCode, 201)
 	return bbClient
 }
@@ -222,7 +266,7 @@ func CreateNewBlockBlobWithCPK(ctx context.Context, _require *require.Assertions
 		CPKScopeInfo: cpkScopeInfo,
 	}
 	cResp, err := bbClient.Upload(ctx, streaming.NopCloser(strings.NewReader(BlockBlobDefaultData)), &uploadBlockBlobOptions)
-	_require.Nil(err)
+	_require.NoError(err)
 	// _require.Equal(cResp.RawResponse.StatusCode, 201)
 	_require.Equal(*cResp.IsServerEncrypted, true)
 	if cpkInfo != nil {
@@ -232,6 +276,18 @@ func CreateNewBlockBlobWithCPK(ctx context.Context, _require *require.Assertions
 		_require.EqualValues(cResp.EncryptionScope, cpkScopeInfo.EncryptionScope)
 	}
 	return
+}
+
+func GetAppendBlobClient(appendBlobName string, containerClient *container.Client) *appendblob.Client {
+	return containerClient.NewAppendBlobClient(appendBlobName)
+}
+
+func CreateNewAppendBlob(ctx context.Context, _require *require.Assertions, appendBlobName string, containerClient *container.Client) *appendblob.Client {
+	abClient := GetAppendBlobClient(appendBlobName, containerClient)
+
+	_, err := abClient.Create(ctx, nil)
+	_require.NoError(err)
+	return abClient
 }
 
 // Some tests require setting service properties. It can take up to 30 seconds for the new properties to be reflected across all FEs.
@@ -252,7 +308,7 @@ func RunTestRequiringServiceProperties(ctx context.Context, _require *require.As
 	if err != nil && err.Error() == code {
 		time.Sleep(time.Second * 30)
 		err = testImplFunc(ctx, _require, svcClient)
-		_require.Nil(err)
+		_require.NoError(err)
 	}
 }
 
@@ -260,23 +316,116 @@ func EnableSoftDelete(ctx context.Context, _require *require.Assertions, client 
 	days := int32(1)
 	_, err := client.SetProperties(ctx, &service.SetPropertiesOptions{
 		DeleteRetentionPolicy: &service.RetentionPolicy{Enabled: to.Ptr(true), Days: &days}})
-	_require.Nil(err)
+	_require.NoError(err)
 }
 
 func DisableSoftDelete(ctx context.Context, _require *require.Assertions, client *service.Client) {
 	_, err := client.SetProperties(ctx, &service.SetPropertiesOptions{DeleteRetentionPolicy: &service.RetentionPolicy{Enabled: to.Ptr(false)}})
-	_require.Nil(err)
+	_require.NoError(err)
 }
 
 func ListBlobsCount(ctx context.Context, _require *require.Assertions, listPager *runtime.Pager[container.ListBlobsFlatResponse], ctr int) {
 	found := make([]*container.BlobItem, 0)
 	for listPager.More() {
 		resp, err := listPager.NextPage(ctx)
-		_require.Nil(err)
+		_require.NoError(err)
 		if err != nil {
 			break
 		}
 		found = append(found, resp.Segment.BlobItems...)
 	}
 	_require.Len(found, ctr)
+}
+
+func GetServiceSAS(containerName string, permissions sas.BlobPermissions) (string, error) {
+	credential, err := GetGenericSharedKeyCredential(TestAccountDefault)
+	if err != nil {
+		return "", err
+	}
+
+	sasQueryParams, err := sas.BlobSignatureValues{
+		Protocol:      sas.ProtocolHTTPS,
+		StartTime:     time.Now().UTC(),
+		ExpiryTime:    time.Now().UTC().Add(2 * time.Hour),
+		Permissions:   permissions.String(),
+		ContainerName: containerName,
+	}.SignWithSharedKey(credential)
+	if err != nil {
+		return "", err
+	}
+
+	return sasQueryParams.Encode(), nil
+}
+
+func GetUserDelegationSAS(svcClient *service.Client, containerName string, permissions sas.BlobPermissions) (string, error) {
+	// Set current and past time and create key
+	now := time.Now().UTC().Add(-10 * time.Second)
+	expiry := now.Add(2 * time.Hour)
+	info := service.KeyInfo{
+		Start:  to.Ptr(now.UTC().Format(sas.TimeFormat)),
+		Expiry: to.Ptr(expiry.UTC().Format(sas.TimeFormat)),
+	}
+
+	udc, err := svcClient.GetUserDelegationCredential(context.Background(), info, nil)
+	if err != nil {
+		return "", err
+	}
+
+	// Create Blob Signature Values with desired permissions and sign with user delegation credential
+	sasQueryParams, err := sas.BlobSignatureValues{
+		Protocol:      sas.ProtocolHTTPS,
+		StartTime:     time.Now().UTC().Add(time.Second * -10),
+		ExpiryTime:    time.Now().UTC().Add(15 * time.Minute),
+		Permissions:   permissions.String(),
+		ContainerName: containerName,
+	}.SignWithUserDelegation(udc)
+	if err != nil {
+		return "", err
+	}
+
+	return sasQueryParams.Encode(), nil
+}
+
+func GetAccountSAS(permissions sas.AccountPermissions, resourceTypes sas.AccountResourceTypes) (string, error) {
+	credential, err := GetGenericSharedKeyCredential(TestAccountDefault)
+	if err != nil {
+		return "", err
+	}
+
+	sasQueryParams, err := sas.AccountSignatureValues{
+		Protocol:      sas.ProtocolHTTPS,
+		StartTime:     time.Now().UTC(),
+		ExpiryTime:    time.Now().UTC().Add(1 * time.Hour),
+		Permissions:   permissions.String(),
+		ResourceTypes: resourceTypes.String(),
+	}.SignWithSharedKey(credential)
+	if err != nil {
+		return "", err
+	}
+
+	return sasQueryParams.Encode(), nil
+}
+
+func DeleteContainerUsingManagementClient(_require *require.Assertions, accountType TestAccountType, containerName string) {
+	if recording.GetRecordMode() == recording.PlaybackMode {
+		return
+	}
+
+	accountName, err := GetRequiredEnv(string(accountType) + AccountNameEnvVar)
+	_require.NoError(err)
+
+	subscriptionID, err := GetRequiredEnv(SubscriptionID)
+	_require.NoError(err)
+
+	resourceGroupName, err := GetRequiredEnv(ResourceGroupName)
+	_require.NoError(err)
+
+	cred, err := azidentity.NewDefaultAzureCredential(nil)
+	_require.NoError(err)
+
+	managementClient, err := armstorage.NewBlobContainersClient(subscriptionID, cred, nil)
+	_require.NoError(err)
+
+	_, err = managementClient.Delete(context.Background(), resourceGroupName, accountName, containerName, nil)
+	_require.NoError(err)
 }

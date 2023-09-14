@@ -9,9 +9,9 @@ package azidentity
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/recording"
 	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/public"
 )
@@ -33,8 +33,8 @@ func TestDeviceCodeCredential_GetTokenInvalidCredentials(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unable to create credential. Received: %v", err)
 	}
-	cred.client = fakePublicClient{err: errors.New("invalid credentials")}
-	_, err = cred.GetToken(context.Background(), policy.TokenRequestOptions{Scopes: []string{liveTestScope}})
+	cred.client.noCAE = fakePublicClient{err: errors.New("invalid credentials")}
+	_, err = cred.GetToken(context.Background(), testTRO)
 	if err == nil {
 		t.Fatalf("Expected an error but did not receive one.")
 	}
@@ -67,7 +67,7 @@ func TestDeviceCodeCredential_UserPromptError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unable to create credential: %v", err)
 	}
-	cred.client = fakePublicClient{
+	cred.client.noCAE = fakePublicClient{
 		dc: public.DeviceCode{
 			Result: public.DeviceCodeResult{
 				Message:         expected.Message,
@@ -76,18 +76,18 @@ func TestDeviceCodeCredential_UserPromptError(t *testing.T) {
 			},
 		},
 	}
-	_, err = cred.GetToken(expectedCtx, policy.TokenRequestOptions{Scopes: []string{liveTestScope}})
+	_, err = cred.GetToken(expectedCtx, testTRO)
 	if err == nil {
 		t.Fatal("expected an error")
 	}
-	if err.Error() != success {
+	if expected := fmt.Sprintf("%s: %s", credNameDeviceCode, success); err.Error() != expected {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 }
 
 func TestDeviceCodeCredential_Live(t *testing.T) {
 	if recording.GetRecordMode() != recording.PlaybackMode && !runManualTests {
-		t.Skip("set AZIDENTITY_RUN_MANUAL_TESTS to run this test")
+		t.Skipf("set %s to run this test", azidentityRunManualTests)
 	}
 	for _, test := range []struct {
 		clientID, desc, tenantID string
@@ -123,7 +123,7 @@ func TestDeviceCodeCredential_Live(t *testing.T) {
 
 func TestDeviceCodeCredentialADFS_Live(t *testing.T) {
 	if recording.GetRecordMode() != recording.PlaybackMode && !runManualTests {
-		t.Skip("set AZIDENTITY_RUN_MANUAL_TESTS to run this test")
+		t.Skipf("set %s to run this test", azidentityRunManualTests)
 	}
 	if adfsLiveSP.clientID == "" {
 		t.Skip("set ADFS_SP_* environment variables to run this test")
@@ -131,7 +131,12 @@ func TestDeviceCodeCredentialADFS_Live(t *testing.T) {
 	o, stop := initRecording(t)
 	defer stop()
 	o.Cloud.ActiveDirectoryAuthorityHost = adfsAuthority
-	opts := DeviceCodeCredentialOptions{TenantID: "adfs", ClientID: adfsLiveUser.clientID, ClientOptions: o, DisableInstanceDiscovery: true}
+	opts := DeviceCodeCredentialOptions{
+		ClientID:                 adfsLiveUser.clientID,
+		ClientOptions:            o,
+		DisableInstanceDiscovery: true,
+		TenantID:                 "adfs",
+	}
 	if recording.GetRecordMode() == recording.PlaybackMode {
 		opts.UserPrompt = func(ctx context.Context, m DeviceCodeMessage) error { return nil }
 	}

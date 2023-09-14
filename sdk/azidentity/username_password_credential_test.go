@@ -12,7 +12,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/recording"
 )
 
@@ -23,18 +22,6 @@ func TestUsernamePasswordCredential_InvalidTenantID(t *testing.T) {
 	}
 	if cred != nil {
 		t.Fatalf("Expected a nil credential value. Received: %v", cred)
-	}
-}
-
-func TestUsernamePasswordCredential_GetTokenSuccess(t *testing.T) {
-	cred, err := NewUsernamePasswordCredential(fakeTenantID, fakeClientID, "username", "password", nil)
-	if err != nil {
-		t.Fatalf("Unable to create credential. Received: %v", err)
-	}
-	cred.client = fakePublicClient{}
-	_, err = cred.GetToken(context.Background(), policy.TokenRequestOptions{Scopes: []string{liveTestScope}})
-	if err != nil {
-		t.Fatalf("Expected an empty error but received: %s", err.Error())
 	}
 }
 
@@ -82,7 +69,7 @@ func TestUsernamePasswordCredential_InvalidPasswordLive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unable to create credential. Received: %v", err)
 	}
-	tk, err := cred.GetToken(context.Background(), policy.TokenRequestOptions{Scopes: []string{liveTestScope}})
+	tk, err := cred.GetToken(context.Background(), testTRO)
 	if !reflect.ValueOf(tk).IsZero() {
 		t.Fatal("expected a zero value AccessToken")
 	}

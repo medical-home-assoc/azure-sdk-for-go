@@ -168,21 +168,35 @@ func (c *managedIdentityClient) authenticate(ctx context.Context, id ManagedIDKi
 
 	resp, err := c.pipeline.Do(msg)
 	if err != nil {
-		return azcore.AccessToken{}, newAuthenticationFailedError(credNameManagedIdentity, err.Error(), nil)
+		return azcore.AccessToken{}, newAuthenticationFailedError(credNameManagedIdentity, err.Error(), nil, err)
 	}
 
 	if runtime.HasStatusCode(resp, http.StatusOK, http.StatusCreated) {
 		return c.createAccessToken(resp)
 	}
 
-	if c.msiType == msiTypeIMDS && resp.StatusCode == 400 {
-		if id != nil {
-			return azcore.AccessToken{}, newAuthenticationFailedError(credNameManagedIdentity, "the requested identity isn't assigned to this resource", resp)
+	if c.msiType == msiTypeIMDS {
+		switch resp.StatusCode {
+		case http.StatusBadRequest:
+			if id != nil {
+				return azcore.AccessToken{}, newAuthenticationFailedError(credNameManagedIdentity, "the requested identity isn't assigned to this resource", resp, nil)
+			}
+			msg := "failed to authenticate a system assigned identity"
+			if body, err := runtime.Payload(resp); err == nil && len(body) > 0 {
+				msg += fmt.Sprintf(". The endpoint responded with %s", body)
+			}
+			return azcore.AccessToken{}, newCredentialUnavailableError(credNameManagedIdentity, msg)
+		case http.StatusForbidden:
+			// Docker Desktop runs a proxy that responds 403 to IMDS token requests. If we get that response,
+			// we return credentialUnavailableError so credential chains continue to their next credential
+			body, err := runtime.Payload(resp)
+			if err == nil && strings.Contains(string(body), "A socket operation was attempted to an unreachable network") {
+				return azcore.AccessToken{}, newCredentialUnavailableError(credNameManagedIdentity, fmt.Sprintf("unexpected response %q", string(body)))
+			}
 		}
-		return azcore.AccessToken{}, newCredentialUnavailableError(credNameManagedIdentity, "no default identity is assigned to this resource")
 	}
 
-	return azcore.AccessToken{}, newAuthenticationFailedError(credNameManagedIdentity, "authentication failed", resp)
+	return azcore.AccessToken{}, newAuthenticationFailedError(credNameManagedIdentity, "authentication failed", resp, nil)
 }
 
 func (c *managedIdentityClient) createAccessToken(res *http.Response) (azcore.AccessToken, error) {
@@ -210,10 +224,10 @@ func (c *managedIdentityClient) createAccessToken(res *http.Response) (azcore.Ac
 		if expiresOn, err := strconv.Atoi(v); err == nil {
 			return azcore.AccessToken{Token: value.Token, ExpiresOn: time.Unix(int64(expiresOn), 0).UTC()}, nil
 		}
-		return azcore.AccessToken{}, newAuthenticationFailedError(credNameManagedIdentity, "unexpected expires_on value: "+v, res)
+		return azcore.AccessToken{}, newAuthenticationFailedError(credNameManagedIdentity, "unexpected expires_on value: "+v, res, nil)
 	default:
 		msg := fmt.Sprintf("unsupported type received in expires_on: %T, %v", v, v)
-		return azcore.AccessToken{}, newAuthenticationFailedError(credNameManagedIdentity, msg, res)
+		return azcore.AccessToken{}, newAuthenticationFailedError(credNameManagedIdentity, msg, res, nil)
 	}
 }
 
@@ -228,7 +242,7 @@ func (c *managedIdentityClient) createAuthRequest(ctx context.Context, id Manage
 		key, err := c.getAzureArcSecretKey(ctx, scopes)
 		if err != nil {
 			msg := fmt.Sprintf("failed to retreive secret key from the identity endpoint: %v", err)
-			return nil, newAuthenticationFailedError(credNameManagedIdentity, msg, nil)
+			return nil, newAuthenticationFailedError(credNameManagedIdentity, msg, nil, err)
 		}
 		return c.createAzureArcAuthRequest(ctx, id, scopes, key)
 	case msiTypeServiceFabric:
@@ -322,7 +336,7 @@ func (c *managedIdentityClient) getAzureArcSecretKey(ctx context.Context, resour
 	// of the secret key file. Any other status code indicates an error in the request.
 	if response.StatusCode != 401 {
 		msg := fmt.Sprintf("expected a 401 response, received %d", response.StatusCode)
-		return "", newAuthenticationFailedError(credNameManagedIdentity, msg, response)
+		return "", newAuthenticationFailedError(credNameManagedIdentity, msg, response, nil)
 	}
 	header := response.Header.Get("WWW-Authenticate")
 	if len(header) == 0 {

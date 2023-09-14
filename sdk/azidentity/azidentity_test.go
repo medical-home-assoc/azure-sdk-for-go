@@ -11,9 +11,9 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -23,7 +23,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/mock"
 	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/confidential"
 	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/public"
-	"github.com/golang-jwt/jwt/v4"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 // constants used throughout this package
@@ -35,90 +35,8 @@ const (
 )
 
 var (
-	accessTokenRespSuccess    = []byte(fmt.Sprintf(`{"access_token": "%s", "expires_in": %d}`, tokenValue, tokenExpiresIn))
-	instanceDiscoveryResponse = []byte(strings.ReplaceAll(`{
-		"tenant_discovery_endpoint": "https://login.microsoftonline.com/{tenant}/v2.0/.well-known/openid-configuration",
-		"api-version": "1.1",
-		"metadata": [
-			{
-				"preferred_network": "login.microsoftonline.com",
-				"preferred_cache": "login.windows.net",
-				"aliases": [
-					"login.microsoftonline.com",
-					"login.windows.net",
-					"login.microsoft.com",
-					"sts.windows.net"
-				]
-			}
-		]
-	}`, "{tenant}", fakeTenantID))
-	tenantDiscoveryResponse = []byte(strings.ReplaceAll(`{
-		"token_endpoint": "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token",
-		"token_endpoint_auth_methods_supported": [
-			"client_secret_post",
-			"private_key_jwt",
-			"client_secret_basic"
-		],
-		"jwks_uri": "https://login.microsoftonline.com/{tenant}/discovery/v2.0/keys",
-		"response_modes_supported": [
-			"query",
-			"fragment",
-			"form_post"
-		],
-		"subject_types_supported": [
-			"pairwise"
-		],
-		"id_token_signing_alg_values_supported": [
-			"RS256"
-		],
-		"response_types_supported": [
-			"code",
-			"id_token",
-			"code id_token",
-			"id_token token"
-		],
-		"scopes_supported": [
-			"openid",
-			"profile",
-			"email",
-			"offline_access"
-		],
-		"issuer": "https://login.microsoftonline.com/{tenant}/v2.0",
-		"request_uri_parameter_supported": false,
-		"userinfo_endpoint": "https://graph.microsoft.com/oidc/userinfo",
-		"authorization_endpoint": "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize",
-		"device_authorization_endpoint": "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/devicecode",
-		"http_logout_supported": true,
-		"frontchannel_logout_supported": true,
-		"end_session_endpoint": "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/logout",
-		"claims_supported": [
-			"sub",
-			"iss",
-			"cloud_instance_name",
-			"cloud_instance_host_name",
-			"cloud_graph_host_name",
-			"msgraph_host",
-			"aud",
-			"exp",
-			"iat",
-			"auth_time",
-			"acr",
-			"nonce",
-			"preferred_username",
-			"name",
-			"tid",
-			"ver",
-			"at_hash",
-			"c_hash",
-			"email"
-		],
-		"kerberos_endpoint": "https://login.microsoftonline.com/{tenant}/kerberos",
-		"tenant_region_scope": "NA",
-		"cloud_instance_name": "microsoftonline.com",
-		"cloud_graph_host_name": "graph.windows.net",
-		"msgraph_host": "graph.microsoft.com",
-		"rbac_url": "https://pas.windows.net"
-	}`, "{tenant}", fakeTenantID))
+	accessTokenRespSuccess = []byte(fmt.Sprintf(`{"access_token": "%s", "expires_in": %d}`, tokenValue, tokenExpiresIn))
+	testTRO                = policy.TokenRequestOptions{Scopes: []string{liveTestScope}}
 )
 
 // constants for this file
@@ -126,59 +44,38 @@ const (
 	testHost = "https://localhost"
 )
 
-func validateX5C(t *testing.T, certs []*x509.Certificate) mock.ResponsePredicate {
-	return func(req *http.Request) bool {
-		body, err := io.ReadAll(req.Body)
+func validateX5C(t *testing.T, certs []*x509.Certificate) func(*http.Request) *http.Response {
+	return func(req *http.Request) *http.Response {
+		err := req.ParseForm()
 		if err != nil {
-			t.Fatal("Expected a request with the JWT in the body.")
+			t.Fatal("expected a form body")
 		}
-		bodystr := string(body)
-		kvps := strings.Split(bodystr, "&")
-		assertion := strings.Split(kvps[0], "=")
-		token, _ := jwt.Parse(assertion[1], nil)
+		assertion, ok := req.PostForm["client_assertion"]
+		if !ok {
+			t.Fatal("expected a client_assertion field")
+		}
+		if len(assertion) != 1 {
+			t.Fatalf(`unexpected client_assertion "%v"`, assertion)
+		}
+		token, _ := jwt.Parse(assertion[0], nil)
 		if token == nil {
-			t.Fatalf("Failed to parse the JWT token: %s.", assertion[1])
+			t.Fatalf("failed to parse the assertion: %s", assertion)
 		}
 		if v, ok := token.Header["x5c"].([]any); !ok {
 			t.Fatal("missing x5c header")
 		} else if actual := len(v); actual != len(certs) {
 			t.Fatalf("expected %d certs, got %d", len(certs), actual)
 		}
-		return true
+		return nil
 	}
 }
 
 // Set environment variables for the duration of a test. Restore their prior values
-// after the test completes. Obviated by 1.17's T.Setenv
+// after the test completes. uses t.Setenv on the key/value pairs in vars.
 func setEnvironmentVariables(t *testing.T, vars map[string]string) {
-	unsetSentinel := "variables having no initial value must be unset after the test"
-	priorValues := make(map[string]string, len(vars))
 	for k, v := range vars {
-		priorValue, ok := os.LookupEnv(k)
-		if ok {
-			priorValues[k] = priorValue
-		} else {
-			priorValues[k] = unsetSentinel
-		}
-		err := os.Setenv(k, v)
-		if err != nil {
-			t.Fatalf("Unexpected error setting %s: %v", k, err)
-		}
+		t.Setenv(k, v)
 	}
-
-	t.Cleanup(func() {
-		for k, v := range priorValues {
-			var err error
-			if v == unsetSentinel {
-				err = os.Unsetenv(k)
-			} else {
-				err = os.Setenv(k, v)
-			}
-			if err != nil {
-				t.Fatalf("Unexpected error resetting %s: %v", k, err)
-			}
-		}
-	})
 }
 
 func Test_WellKnownHosts(t *testing.T) {
@@ -234,7 +131,7 @@ func Test_GetTokenRequiresScopes(t *testing.T) {
 			return NewClientCertificateCredential("tenantID", "clientID", allCertTests[0].certs, allCertTests[0].key, nil)
 		},
 		func() (azcore.TokenCredential, error) {
-			return NewClientSecretCredential("tenantID", "clientID", "secret", nil)
+			return NewClientSecretCredential("tenantID", "clientID", fakeSecret, nil)
 		},
 		func() (azcore.TokenCredential, error) { return NewDeviceCodeCredential(nil) },
 		func() (azcore.TokenCredential, error) { return NewInteractiveBrowserCredential(nil) },
@@ -266,33 +163,450 @@ func Test_NonHTTPSAuthorityHost(t *testing.T) {
 	}
 }
 
-func Test_ValidTenantIDFalse(t *testing.T) {
-	if validTenantID("bad@tenant") {
-		t.Fatal("Expected to receive false, but received true")
+func TestAdditionallyAllowedTenants(t *testing.T) {
+	af := filepath.Join(t.TempDir(), t.Name()+credNameWorkloadIdentity)
+	if err := os.WriteFile(af, []byte("assertion"), os.ModePerm); err != nil {
+		t.Fatal(err)
 	}
-	if validTenantID("bad/tenant") {
-		t.Fatal("Expected to receive false, but received true")
-	}
-	if validTenantID("bad(tenant") {
-		t.Fatal("Expected to receive false, but received true")
-	}
-	if validTenantID("bad)tenant") {
-		t.Fatal("Expected to receive false, but received true")
-	}
-	if validTenantID("bad:tenant") {
-		t.Fatal("Expected to receive false, but received true")
+	tenantA := "A"
+	tenantB := "B"
+	for _, test := range []struct {
+		allowed                []string
+		desc, expected, tenant string
+		err                    bool
+	}{
+		{
+			desc:     "all tenants allowed",
+			allowed:  []string{"*"},
+			expected: tenantA,
+			tenant:   tenantA,
+		},
+		{
+			desc:     "tenant explicitly allowed",
+			allowed:  []string{tenantA, tenantB},
+			expected: tenantA,
+			tenant:   tenantA,
+		},
+		{
+			desc:     "tenant explicitly allowed",
+			allowed:  []string{tenantA, tenantB},
+			expected: tenantB,
+			tenant:   tenantB,
+		},
+		{
+			desc:    "tenant not allowed",
+			allowed: []string{tenantA},
+			tenant:  tenantB,
+			err:     true,
+		},
+		{
+			desc:   "no additional tenants allowed",
+			tenant: tenantA,
+			err:    true,
+		},
+	} {
+		tro := policy.TokenRequestOptions{Scopes: []string{liveTestScope}, TenantID: test.tenant}
+		for _, subtest := range []struct {
+			ctor func(azcore.ClientOptions) (azcore.TokenCredential, error)
+			env  map[string]string
+			name string
+		}{
+			{
+				name: credNameAssertion,
+				ctor: func(co azcore.ClientOptions) (azcore.TokenCredential, error) {
+					o := ClientAssertionCredentialOptions{AdditionallyAllowedTenants: test.allowed, ClientOptions: co}
+					return NewClientAssertionCredential(fakeTenantID, fakeClientID, func(context.Context) (string, error) { return "...", nil }, &o)
+				},
+			},
+			{
+				name: credNameAzureCLI,
+				ctor: func(azcore.ClientOptions) (azcore.TokenCredential, error) {
+					o := AzureCLICredentialOptions{
+						AdditionallyAllowedTenants: test.allowed,
+						tokenProvider: func(ctx context.Context, resource, tenantID string) ([]byte, error) {
+							if tenantID != test.expected {
+								t.Errorf(`unexpected tenantID "%s"`, tenantID)
+							}
+							return mockCLITokenProviderSuccess(ctx, resource, tenantID)
+						},
+					}
+					return NewAzureCLICredential(&o)
+				},
+			},
+			{
+				name: credNameCert,
+				ctor: func(co azcore.ClientOptions) (azcore.TokenCredential, error) {
+					o := ClientCertificateCredentialOptions{AdditionallyAllowedTenants: test.allowed, ClientOptions: co}
+					return NewClientCertificateCredential(fakeTenantID, fakeClientID, allCertTests[0].certs, allCertTests[0].key, &o)
+				},
+			},
+			{
+				name: credNameDeviceCode,
+				ctor: func(co azcore.ClientOptions) (azcore.TokenCredential, error) {
+					o := DeviceCodeCredentialOptions{
+						AdditionallyAllowedTenants: test.allowed,
+						ClientOptions:              co,
+						UserPrompt:                 func(context.Context, DeviceCodeMessage) error { return nil },
+					}
+					return NewDeviceCodeCredential(&o)
+				},
+			},
+			{
+				name: credNameOBO,
+				ctor: func(co azcore.ClientOptions) (azcore.TokenCredential, error) {
+					o := OnBehalfOfCredentialOptions{
+						AdditionallyAllowedTenants: test.allowed,
+						ClientOptions:              co,
+					}
+					return NewOnBehalfOfCredentialWithSecret(fakeTenantID, fakeClientID, "assertion", fakeSecret, &o)
+				},
+			},
+			{
+				name: credNameSecret,
+				ctor: func(co azcore.ClientOptions) (azcore.TokenCredential, error) {
+					o := ClientSecretCredentialOptions{AdditionallyAllowedTenants: test.allowed, ClientOptions: co}
+					return NewClientSecretCredential(fakeTenantID, fakeClientID, fakeSecret, &o)
+				},
+			},
+			{
+				name: credNameUserPassword,
+				ctor: func(co azcore.ClientOptions) (azcore.TokenCredential, error) {
+					o := UsernamePasswordCredentialOptions{AdditionallyAllowedTenants: test.allowed, ClientOptions: co}
+					return NewUsernamePasswordCredential(fakeTenantID, fakeClientID, fakeUsername, "password", &o)
+				},
+			},
+			{
+				name: credNameWorkloadIdentity,
+				ctor: func(co azcore.ClientOptions) (azcore.TokenCredential, error) {
+					return NewWorkloadIdentityCredential(&WorkloadIdentityCredentialOptions{
+						AdditionallyAllowedTenants: test.allowed,
+						ClientID:                   fakeClientID,
+						ClientOptions:              co,
+						TenantID:                   fakeTenantID,
+						TokenFilePath:              af,
+					})
+				},
+			},
+			{
+				name: "DefaultAzureCredential/EnvironmentCredential",
+				ctor: func(co azcore.ClientOptions) (azcore.TokenCredential, error) {
+					o := DefaultAzureCredentialOptions{ClientOptions: co, TenantID: test.tenant}
+					return NewDefaultAzureCredential(&o)
+				},
+				env: map[string]string{
+					azureAdditionallyAllowedTenants: strings.Join(test.allowed, ";"),
+					azureClientID:                   fakeClientID,
+					azureClientSecret:               fakeSecret,
+					azureTenantID:                   fakeTenantID,
+				},
+			},
+			{
+				name: "DefaultAzureCredential/EnvironmentCredential/option-overrides-env",
+				ctor: func(co azcore.ClientOptions) (azcore.TokenCredential, error) {
+					o := DefaultAzureCredentialOptions{AdditionallyAllowedTenants: test.allowed, ClientOptions: co, TenantID: test.tenant}
+					return NewDefaultAzureCredential(&o)
+				},
+				env: map[string]string{
+					azureAdditionallyAllowedTenants: "not-" + test.tenant,
+					azureClientID:                   fakeClientID,
+					azureClientSecret:               fakeSecret,
+					azureTenantID:                   fakeTenantID,
+				},
+			},
+			{
+				name: "DefaultAzureCredential/" + credNameWorkloadIdentity,
+				ctor: func(co azcore.ClientOptions) (azcore.TokenCredential, error) {
+					o := DefaultAzureCredentialOptions{AdditionallyAllowedTenants: test.allowed, ClientOptions: co}
+					return NewDefaultAzureCredential(&o)
+				},
+				env: map[string]string{
+					azureAdditionallyAllowedTenants: strings.Join(test.allowed, ";"),
+					azureAuthorityHost:              "https://login.microsoftonline.com",
+					azureClientID:                   fakeClientID,
+					azureFederatedTokenFile:         af,
+					azureTenantID:                   fakeTenantID,
+				},
+			},
+			{
+				name: "EnvironmentCredential/" + credNameCert,
+				ctor: func(co azcore.ClientOptions) (azcore.TokenCredential, error) {
+					return NewEnvironmentCredential(&EnvironmentCredentialOptions{ClientOptions: co})
+				},
+				env: map[string]string{
+					azureAdditionallyAllowedTenants: strings.Join(test.allowed, ";"),
+					azureClientCertificatePath:      "testdata/certificate.pem",
+					azureClientID:                   fakeClientID,
+					azureTenantID:                   fakeTenantID,
+				},
+			},
+			{
+				name: "EnvironmentCredential/" + credNameSecret,
+				ctor: func(co azcore.ClientOptions) (azcore.TokenCredential, error) {
+					return NewEnvironmentCredential(&EnvironmentCredentialOptions{ClientOptions: co})
+				},
+				env: map[string]string{
+					azureAdditionallyAllowedTenants: strings.Join(test.allowed, ";"),
+					azureClientID:                   fakeClientID,
+					azureClientSecret:               fakeSecret,
+					azureTenantID:                   fakeTenantID,
+				},
+			},
+			{
+				name: "EnvironmentCredential/" + credNameUserPassword,
+				ctor: func(co azcore.ClientOptions) (azcore.TokenCredential, error) {
+					return NewEnvironmentCredential(&EnvironmentCredentialOptions{ClientOptions: co})
+				},
+				env: map[string]string{
+					azureAdditionallyAllowedTenants: strings.Join(test.allowed, ";"),
+					azureClientID:                   fakeClientID,
+					azurePassword:                   "password",
+					azureTenantID:                   fakeTenantID,
+					azureUsername:                   fakeUsername,
+				},
+			},
+		} {
+			t.Run(fmt.Sprintf("%s/%s", subtest.name, test.desc), func(t *testing.T) {
+				for k, v := range subtest.env {
+					t.Setenv(k, v)
+				}
+				sts := mockSTS{
+					tenant: test.tenant,
+					tokenRequestCallback: func(r *http.Request) *http.Response {
+						if actual := strings.Split(r.URL.Path, "/")[1]; actual != test.expected {
+							t.Fatalf("expected tenant %q, got %q", test.expected, actual)
+						}
+						return nil
+					},
+				}
+				c, err := subtest.ctor(policy.ClientOptions{Transport: &sts})
+				if err != nil {
+					t.Fatal(err)
+				}
+				tk, err := c.GetToken(context.Background(), tro)
+				if err != nil {
+					if test.err {
+						return
+					}
+					t.Fatal(err)
+				} else if test.err {
+					t.Fatal("expected an error")
+				}
+				// silent authentication should succeed
+				tk2, err := c.GetToken(context.Background(), tro)
+				if err != nil {
+					t.Fatalf(`silent authentication failed: "%v"`, err)
+				}
+				if tk.Token != tk2.Token {
+					t.Fatalf("expected %q, got %q", tk.Token, tk2.Token)
+				}
+				if !tk.ExpiresOn.Equal(tk2.ExpiresOn) {
+					t.Fatalf("expected %v, got %v", tk.ExpiresOn, tk2.ExpiresOn)
+				}
+			})
+		}
+		t.Run(fmt.Sprintf("DefaultAzureCredential/%s/%s", credNameAzureCLI, test.desc), func(t *testing.T) {
+			// mock IMDS failure because managed identity precedes CLI in the chain
+			srv, close := mock.NewTLSServer(mock.WithTransformAllRequestsToTestServerUrl())
+			defer close()
+			srv.SetResponse(mock.WithStatusCode(400))
+			o := DefaultAzureCredentialOptions{
+				AdditionallyAllowedTenants: test.allowed,
+				ClientOptions:              policy.ClientOptions{Transport: srv},
+			}
+			c, err := NewDefaultAzureCredential(&o)
+			if err != nil {
+				t.Fatal(err)
+			}
+			called := false
+			for _, source := range c.chain.sources {
+				if cli, ok := source.(*AzureCLICredential); ok {
+					cli.opts.tokenProvider = func(ctx context.Context, resource, tenantID string) ([]byte, error) {
+						called = true
+						if tenantID != test.expected {
+							t.Fatalf(`unexpected tenantID "%s"`, tenantID)
+						}
+						return mockCLITokenProviderSuccess(ctx, resource, tenantID)
+					}
+					break
+				}
+			}
+			if _, err := c.GetToken(context.Background(), tro); err != nil {
+				if test.err {
+					return
+				}
+				t.Fatal(err)
+			} else if test.err {
+				t.Fatal("expected an error")
+			}
+			if !called {
+				t.Fatal("AzureCLICredential wasn't invoked")
+			}
+		})
 	}
 }
 
-func Test_ValidTenantIDTrue(t *testing.T) {
-	if !validTenantID("goodtenant") {
-		t.Fatal("Expected to receive true, but received false")
+func TestClaims(t *testing.T) {
+	claim := `"test":"pass"`
+	for _, test := range []struct {
+		ctor func(azcore.ClientOptions) (azcore.TokenCredential, error)
+		name string
+	}{
+		{
+			name: credNameAssertion,
+			ctor: func(co azcore.ClientOptions) (azcore.TokenCredential, error) {
+				o := ClientAssertionCredentialOptions{ClientOptions: co}
+				return NewClientAssertionCredential(fakeTenantID, fakeClientID, func(context.Context) (string, error) { return "...", nil }, &o)
+			},
+		},
+		{
+			name: credNameCert,
+			ctor: func(co azcore.ClientOptions) (azcore.TokenCredential, error) {
+				o := ClientCertificateCredentialOptions{ClientOptions: co}
+				return NewClientCertificateCredential(fakeTenantID, fakeClientID, allCertTests[0].certs, allCertTests[0].key, &o)
+			},
+		},
+		{
+			name: credNameDeviceCode,
+			ctor: func(co azcore.ClientOptions) (azcore.TokenCredential, error) {
+				o := DeviceCodeCredentialOptions{
+					ClientOptions: co,
+					UserPrompt:    func(context.Context, DeviceCodeMessage) error { return nil },
+				}
+				return NewDeviceCodeCredential(&o)
+			},
+		},
+		{
+			name: credNameOBO,
+			ctor: func(co azcore.ClientOptions) (azcore.TokenCredential, error) {
+				o := OnBehalfOfCredentialOptions{ClientOptions: co}
+				return NewOnBehalfOfCredentialWithSecret(fakeTenantID, fakeClientID, "assertion", fakeSecret, &o)
+			},
+		},
+		{
+			name: credNameSecret,
+			ctor: func(co azcore.ClientOptions) (azcore.TokenCredential, error) {
+				o := ClientSecretCredentialOptions{ClientOptions: co}
+				return NewClientSecretCredential(fakeTenantID, fakeClientID, fakeSecret, &o)
+			},
+		},
+		{
+			name: credNameUserPassword,
+			ctor: func(co azcore.ClientOptions) (azcore.TokenCredential, error) {
+				o := UsernamePasswordCredentialOptions{ClientOptions: co}
+				return NewUsernamePasswordCredential(fakeTenantID, fakeClientID, fakeUsername, "password", &o)
+			},
+		},
+		{
+			name: credNameWorkloadIdentity,
+			ctor: func(co azcore.ClientOptions) (azcore.TokenCredential, error) {
+				tokenFile := filepath.Join(t.TempDir(), "token")
+				if err := os.WriteFile(tokenFile, []byte(tokenValue), os.ModePerm); err != nil {
+					t.Fatalf("failed to write token file: %v", err)
+				}
+				o := WorkloadIdentityCredentialOptions{ClientID: fakeClientID, ClientOptions: co, TenantID: fakeTenantID, TokenFilePath: tokenFile}
+				return NewWorkloadIdentityCredential(&o)
+			},
+		},
+	} {
+		for _, enableCAE := range []bool{true, false} {
+			name := test.name
+			if enableCAE {
+				name += " CAE"
+			}
+			t.Run(name, func(t *testing.T) {
+				reqs := 0
+				sts := mockSTS{
+					tokenRequestCallback: func(r *http.Request) *http.Response {
+						if err := r.ParseForm(); err != nil {
+							t.Error(err)
+						}
+						reqs++
+						// Both requests should specify CP1 when CAE is enabled for the token.
+						// We check only for substrings because MSAL is responsible for formatting claims.
+						actual := fmt.Sprint(r.Form["claims"])
+						if strings.Contains(actual, "CP1") != enableCAE {
+							t.Fatalf(`unexpected claims "%v"`, actual)
+						}
+						if reqs == 2 {
+							// the second GetToken call specifies claims we should find in the following token request
+							if !strings.Contains(strings.ReplaceAll(actual, " ", ""), claim) {
+								t.Fatalf(`unexpected claims "%v"`, actual)
+							}
+						}
+						return nil
+					},
+				}
+				o := azcore.ClientOptions{Transport: &sts}
+				cred, err := test.ctor(o)
+				if err != nil {
+					t.Fatal(err)
+				}
+				tro := policy.TokenRequestOptions{EnableCAE: enableCAE, Scopes: []string{"A"}}
+				if _, err = cred.GetToken(context.Background(), tro); err != nil {
+					t.Fatal(err)
+				}
+				tro = policy.TokenRequestOptions{Claims: fmt.Sprintf("{%s}", claim), EnableCAE: enableCAE, Scopes: []string{"B"}}
+				if _, err = cred.GetToken(context.Background(), tro); err != nil {
+					t.Fatal(err)
+				}
+				if reqs != 2 {
+					t.Fatalf("expected %d token requests, got %d", 2, reqs)
+				}
+			})
+		}
 	}
-	if !validTenantID("good-tenant") {
-		t.Fatal("Expected to receive true, but received false")
-	}
-	if !validTenantID("good.tenant") {
-		t.Fatal("Expected to receive true, but received false")
+}
+
+func TestResolveTenant(t *testing.T) {
+	credName := "testcred"
+	defaultTenant := "default-tenant"
+	otherTenant := "other-tenant"
+	for _, test := range []struct {
+		allowed          []string
+		expected, tenant string
+		expectError      bool
+	}{
+		// no alternate tenant specified -> should get default
+		{expected: defaultTenant},
+		{allowed: []string{""}, expected: defaultTenant},
+		{allowed: []string{"*"}, expected: defaultTenant},
+		{allowed: []string{otherTenant}, expected: defaultTenant},
+
+		// alternate tenant specified and allowed -> should get that tenant
+		{allowed: []string{"*"}, expected: otherTenant, tenant: otherTenant},
+		{allowed: []string{otherTenant}, expected: otherTenant, tenant: otherTenant},
+		{allowed: []string{"not-" + otherTenant, otherTenant}, expected: otherTenant, tenant: otherTenant},
+		{allowed: []string{"not-" + otherTenant, "*"}, expected: otherTenant, tenant: otherTenant},
+
+		// invalid or not allowed tenant -> should get an error
+		{tenant: otherTenant, expectError: true},
+		{allowed: []string{""}, tenant: otherTenant, expectError: true},
+		{allowed: []string{defaultTenant}, tenant: otherTenant, expectError: true},
+		{tenant: badTenantID, expectError: true},
+		{allowed: []string{""}, tenant: badTenantID, expectError: true},
+		{allowed: []string{"*", badTenantID}, tenant: badTenantID, expectError: true},
+		{tenant: "invalid@tenant", expectError: true},
+		{tenant: "invalid/tenant", expectError: true},
+		{tenant: "invalid(tenant", expectError: true},
+		{tenant: "invalid:tenant", expectError: true},
+	} {
+		t.Run("", func(t *testing.T) {
+			tenant, err := resolveTenant(defaultTenant, test.tenant, credName, test.allowed)
+			if err != nil {
+				if test.expectError {
+					if validTenantID(test.tenant) && !strings.Contains(err.Error(), credName) {
+						t.Fatalf("expected error to contain %q, got %q", credName, err.Error())
+					}
+					return
+				}
+				t.Fatal(err)
+			} else if test.expectError {
+				t.Fatal("expected an error")
+			}
+			if tenant != test.expected {
+				t.Fatalf(`expected "%s", got "%s"`, test.expected, tenant)
+			}
+		})
 	}
 }
 
@@ -341,7 +655,7 @@ func (f fakeConfidentialClient) AcquireTokenOnBehalfOf(ctx context.Context, user
 	return f.returnResult()
 }
 
-var _ confidentialClient = (*fakeConfidentialClient)(nil)
+var _ msalConfidentialClient = (*fakeConfidentialClient)(nil)
 
 // ==================================================================================================================================
 
@@ -392,4 +706,4 @@ func (f fakePublicClient) AcquireTokenInteractive(ctx context.Context, scopes []
 	return f.returnResult()
 }
 
-var _ publicClient = (*fakePublicClient)(nil)
+var _ msalPublicClient = (*fakePublicClient)(nil)

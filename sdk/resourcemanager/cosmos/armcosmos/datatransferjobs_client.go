@@ -14,8 +14,6 @@ import (
 	"errors"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
-	armruntime "github.com/Azure/azure-sdk-for-go/sdk/azcore/arm/runtime"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"net/http"
@@ -26,48 +24,40 @@ import (
 // DataTransferJobsClient contains the methods for the DataTransferJobs group.
 // Don't use this type directly, use NewDataTransferJobsClient() instead.
 type DataTransferJobsClient struct {
-	host           string
+	internal       *arm.Client
 	subscriptionID string
-	pl             runtime.Pipeline
 }
 
 // NewDataTransferJobsClient creates a new instance of DataTransferJobsClient with the specified values.
-// subscriptionID - The ID of the target subscription.
-// credential - used to authorize requests. Usually a credential from azidentity.
-// options - pass nil to accept the default values.
+//   - subscriptionID - The ID of the target subscription.
+//   - credential - used to authorize requests. Usually a credential from azidentity.
+//   - options - pass nil to accept the default values.
 func NewDataTransferJobsClient(subscriptionID string, credential azcore.TokenCredential, options *arm.ClientOptions) (*DataTransferJobsClient, error) {
-	if options == nil {
-		options = &arm.ClientOptions{}
-	}
-	ep := cloud.AzurePublic.Services[cloud.ResourceManager].Endpoint
-	if c, ok := options.Cloud.Services[cloud.ResourceManager]; ok {
-		ep = c.Endpoint
-	}
-	pl, err := armruntime.NewPipeline(moduleName, moduleVersion, credential, runtime.PipelineOptions{}, options)
+	cl, err := arm.NewClient(moduleName+".DataTransferJobsClient", moduleVersion, credential, options)
 	if err != nil {
 		return nil, err
 	}
 	client := &DataTransferJobsClient{
 		subscriptionID: subscriptionID,
-		host:           ep,
-		pl:             pl,
+		internal:       cl,
 	}
 	return client, nil
 }
 
 // Cancel - Cancels a Data Transfer Job.
 // If the operation fails it returns an *azcore.ResponseError type.
-// Generated from API version 2022-08-15-preview
-// resourceGroupName - The name of the resource group. The name is case insensitive.
-// accountName - Cosmos DB database account name.
-// jobName - Name of the Data Transfer Job
-// options - DataTransferJobsClientCancelOptions contains the optional parameters for the DataTransferJobsClient.Cancel method.
+//
+// Generated from API version 2023-03-15-preview
+//   - resourceGroupName - The name of the resource group. The name is case insensitive.
+//   - accountName - Cosmos DB database account name.
+//   - jobName - Name of the Data Transfer Job
+//   - options - DataTransferJobsClientCancelOptions contains the optional parameters for the DataTransferJobsClient.Cancel method.
 func (client *DataTransferJobsClient) Cancel(ctx context.Context, resourceGroupName string, accountName string, jobName string, options *DataTransferJobsClientCancelOptions) (DataTransferJobsClientCancelResponse, error) {
 	req, err := client.cancelCreateRequest(ctx, resourceGroupName, accountName, jobName, options)
 	if err != nil {
 		return DataTransferJobsClientCancelResponse{}, err
 	}
-	resp, err := client.pl.Do(req)
+	resp, err := client.internal.Pipeline().Do(req)
 	if err != nil {
 		return DataTransferJobsClientCancelResponse{}, err
 	}
@@ -96,12 +86,12 @@ func (client *DataTransferJobsClient) cancelCreateRequest(ctx context.Context, r
 		return nil, errors.New("parameter jobName cannot be empty")
 	}
 	urlPath = strings.ReplaceAll(urlPath, "{jobName}", url.PathEscape(jobName))
-	req, err := runtime.NewRequest(ctx, http.MethodPost, runtime.JoinPaths(client.host, urlPath))
+	req, err := runtime.NewRequest(ctx, http.MethodPost, runtime.JoinPaths(client.internal.Endpoint(), urlPath))
 	if err != nil {
 		return nil, err
 	}
 	reqQP := req.Raw().URL.Query()
-	reqQP.Set("api-version", "2022-08-15-preview")
+	reqQP.Set("api-version", "2023-03-15-preview")
 	req.Raw().URL.RawQuery = reqQP.Encode()
 	req.Raw().Header["Accept"] = []string{"application/json"}
 	return req, nil
@@ -118,17 +108,18 @@ func (client *DataTransferJobsClient) cancelHandleResponse(resp *http.Response) 
 
 // Create - Creates a Data Transfer Job.
 // If the operation fails it returns an *azcore.ResponseError type.
-// Generated from API version 2022-08-15-preview
-// resourceGroupName - The name of the resource group. The name is case insensitive.
-// accountName - Cosmos DB database account name.
-// jobName - Name of the Data Transfer Job
-// options - DataTransferJobsClientCreateOptions contains the optional parameters for the DataTransferJobsClient.Create method.
+//
+// Generated from API version 2023-03-15-preview
+//   - resourceGroupName - The name of the resource group. The name is case insensitive.
+//   - accountName - Cosmos DB database account name.
+//   - jobName - Name of the Data Transfer Job
+//   - options - DataTransferJobsClientCreateOptions contains the optional parameters for the DataTransferJobsClient.Create method.
 func (client *DataTransferJobsClient) Create(ctx context.Context, resourceGroupName string, accountName string, jobName string, jobCreateParameters CreateJobRequest, options *DataTransferJobsClientCreateOptions) (DataTransferJobsClientCreateResponse, error) {
 	req, err := client.createCreateRequest(ctx, resourceGroupName, accountName, jobName, jobCreateParameters, options)
 	if err != nil {
 		return DataTransferJobsClientCreateResponse{}, err
 	}
-	resp, err := client.pl.Do(req)
+	resp, err := client.internal.Pipeline().Do(req)
 	if err != nil {
 		return DataTransferJobsClientCreateResponse{}, err
 	}
@@ -157,12 +148,12 @@ func (client *DataTransferJobsClient) createCreateRequest(ctx context.Context, r
 		return nil, errors.New("parameter jobName cannot be empty")
 	}
 	urlPath = strings.ReplaceAll(urlPath, "{jobName}", url.PathEscape(jobName))
-	req, err := runtime.NewRequest(ctx, http.MethodPut, runtime.JoinPaths(client.host, urlPath))
+	req, err := runtime.NewRequest(ctx, http.MethodPut, runtime.JoinPaths(client.internal.Endpoint(), urlPath))
 	if err != nil {
 		return nil, err
 	}
 	reqQP := req.Raw().URL.Query()
-	reqQP.Set("api-version", "2022-08-15-preview")
+	reqQP.Set("api-version", "2023-03-15-preview")
 	req.Raw().URL.RawQuery = reqQP.Encode()
 	req.Raw().Header["Accept"] = []string{"application/json"}
 	return req, runtime.MarshalAsJSON(req, jobCreateParameters)
@@ -179,17 +170,18 @@ func (client *DataTransferJobsClient) createHandleResponse(resp *http.Response) 
 
 // Get - Get a Data Transfer Job.
 // If the operation fails it returns an *azcore.ResponseError type.
-// Generated from API version 2022-08-15-preview
-// resourceGroupName - The name of the resource group. The name is case insensitive.
-// accountName - Cosmos DB database account name.
-// jobName - Name of the Data Transfer Job
-// options - DataTransferJobsClientGetOptions contains the optional parameters for the DataTransferJobsClient.Get method.
+//
+// Generated from API version 2023-03-15-preview
+//   - resourceGroupName - The name of the resource group. The name is case insensitive.
+//   - accountName - Cosmos DB database account name.
+//   - jobName - Name of the Data Transfer Job
+//   - options - DataTransferJobsClientGetOptions contains the optional parameters for the DataTransferJobsClient.Get method.
 func (client *DataTransferJobsClient) Get(ctx context.Context, resourceGroupName string, accountName string, jobName string, options *DataTransferJobsClientGetOptions) (DataTransferJobsClientGetResponse, error) {
 	req, err := client.getCreateRequest(ctx, resourceGroupName, accountName, jobName, options)
 	if err != nil {
 		return DataTransferJobsClientGetResponse{}, err
 	}
-	resp, err := client.pl.Do(req)
+	resp, err := client.internal.Pipeline().Do(req)
 	if err != nil {
 		return DataTransferJobsClientGetResponse{}, err
 	}
@@ -218,12 +210,12 @@ func (client *DataTransferJobsClient) getCreateRequest(ctx context.Context, reso
 		return nil, errors.New("parameter jobName cannot be empty")
 	}
 	urlPath = strings.ReplaceAll(urlPath, "{jobName}", url.PathEscape(jobName))
-	req, err := runtime.NewRequest(ctx, http.MethodGet, runtime.JoinPaths(client.host, urlPath))
+	req, err := runtime.NewRequest(ctx, http.MethodGet, runtime.JoinPaths(client.internal.Endpoint(), urlPath))
 	if err != nil {
 		return nil, err
 	}
 	reqQP := req.Raw().URL.Query()
-	reqQP.Set("api-version", "2022-08-15-preview")
+	reqQP.Set("api-version", "2023-03-15-preview")
 	req.Raw().URL.RawQuery = reqQP.Encode()
 	req.Raw().Header["Accept"] = []string{"application/json"}
 	return req, nil
@@ -239,11 +231,12 @@ func (client *DataTransferJobsClient) getHandleResponse(resp *http.Response) (Da
 }
 
 // NewListByDatabaseAccountPager - Get a list of Data Transfer jobs.
-// Generated from API version 2022-08-15-preview
-// resourceGroupName - The name of the resource group. The name is case insensitive.
-// accountName - Cosmos DB database account name.
-// options - DataTransferJobsClientListByDatabaseAccountOptions contains the optional parameters for the DataTransferJobsClient.ListByDatabaseAccount
-// method.
+//
+// Generated from API version 2023-03-15-preview
+//   - resourceGroupName - The name of the resource group. The name is case insensitive.
+//   - accountName - Cosmos DB database account name.
+//   - options - DataTransferJobsClientListByDatabaseAccountOptions contains the optional parameters for the DataTransferJobsClient.NewListByDatabaseAccountPager
+//     method.
 func (client *DataTransferJobsClient) NewListByDatabaseAccountPager(resourceGroupName string, accountName string, options *DataTransferJobsClientListByDatabaseAccountOptions) *runtime.Pager[DataTransferJobsClientListByDatabaseAccountResponse] {
 	return runtime.NewPager(runtime.PagingHandler[DataTransferJobsClientListByDatabaseAccountResponse]{
 		More: func(page DataTransferJobsClientListByDatabaseAccountResponse) bool {
@@ -260,7 +253,7 @@ func (client *DataTransferJobsClient) NewListByDatabaseAccountPager(resourceGrou
 			if err != nil {
 				return DataTransferJobsClientListByDatabaseAccountResponse{}, err
 			}
-			resp, err := client.pl.Do(req)
+			resp, err := client.internal.Pipeline().Do(req)
 			if err != nil {
 				return DataTransferJobsClientListByDatabaseAccountResponse{}, err
 			}
@@ -287,12 +280,12 @@ func (client *DataTransferJobsClient) listByDatabaseAccountCreateRequest(ctx con
 		return nil, errors.New("parameter accountName cannot be empty")
 	}
 	urlPath = strings.ReplaceAll(urlPath, "{accountName}", url.PathEscape(accountName))
-	req, err := runtime.NewRequest(ctx, http.MethodGet, runtime.JoinPaths(client.host, urlPath))
+	req, err := runtime.NewRequest(ctx, http.MethodGet, runtime.JoinPaths(client.internal.Endpoint(), urlPath))
 	if err != nil {
 		return nil, err
 	}
 	reqQP := req.Raw().URL.Query()
-	reqQP.Set("api-version", "2022-08-15-preview")
+	reqQP.Set("api-version", "2023-03-15-preview")
 	req.Raw().URL.RawQuery = reqQP.Encode()
 	req.Raw().Header["Accept"] = []string{"application/json"}
 	return req, nil
@@ -309,17 +302,18 @@ func (client *DataTransferJobsClient) listByDatabaseAccountHandleResponse(resp *
 
 // Pause - Pause a Data Transfer Job.
 // If the operation fails it returns an *azcore.ResponseError type.
-// Generated from API version 2022-08-15-preview
-// resourceGroupName - The name of the resource group. The name is case insensitive.
-// accountName - Cosmos DB database account name.
-// jobName - Name of the Data Transfer Job
-// options - DataTransferJobsClientPauseOptions contains the optional parameters for the DataTransferJobsClient.Pause method.
+//
+// Generated from API version 2023-03-15-preview
+//   - resourceGroupName - The name of the resource group. The name is case insensitive.
+//   - accountName - Cosmos DB database account name.
+//   - jobName - Name of the Data Transfer Job
+//   - options - DataTransferJobsClientPauseOptions contains the optional parameters for the DataTransferJobsClient.Pause method.
 func (client *DataTransferJobsClient) Pause(ctx context.Context, resourceGroupName string, accountName string, jobName string, options *DataTransferJobsClientPauseOptions) (DataTransferJobsClientPauseResponse, error) {
 	req, err := client.pauseCreateRequest(ctx, resourceGroupName, accountName, jobName, options)
 	if err != nil {
 		return DataTransferJobsClientPauseResponse{}, err
 	}
-	resp, err := client.pl.Do(req)
+	resp, err := client.internal.Pipeline().Do(req)
 	if err != nil {
 		return DataTransferJobsClientPauseResponse{}, err
 	}
@@ -348,12 +342,12 @@ func (client *DataTransferJobsClient) pauseCreateRequest(ctx context.Context, re
 		return nil, errors.New("parameter jobName cannot be empty")
 	}
 	urlPath = strings.ReplaceAll(urlPath, "{jobName}", url.PathEscape(jobName))
-	req, err := runtime.NewRequest(ctx, http.MethodPost, runtime.JoinPaths(client.host, urlPath))
+	req, err := runtime.NewRequest(ctx, http.MethodPost, runtime.JoinPaths(client.internal.Endpoint(), urlPath))
 	if err != nil {
 		return nil, err
 	}
 	reqQP := req.Raw().URL.Query()
-	reqQP.Set("api-version", "2022-08-15-preview")
+	reqQP.Set("api-version", "2023-03-15-preview")
 	req.Raw().URL.RawQuery = reqQP.Encode()
 	req.Raw().Header["Accept"] = []string{"application/json"}
 	return req, nil
@@ -370,17 +364,18 @@ func (client *DataTransferJobsClient) pauseHandleResponse(resp *http.Response) (
 
 // Resume - Resumes a Data Transfer Job.
 // If the operation fails it returns an *azcore.ResponseError type.
-// Generated from API version 2022-08-15-preview
-// resourceGroupName - The name of the resource group. The name is case insensitive.
-// accountName - Cosmos DB database account name.
-// jobName - Name of the Data Transfer Job
-// options - DataTransferJobsClientResumeOptions contains the optional parameters for the DataTransferJobsClient.Resume method.
+//
+// Generated from API version 2023-03-15-preview
+//   - resourceGroupName - The name of the resource group. The name is case insensitive.
+//   - accountName - Cosmos DB database account name.
+//   - jobName - Name of the Data Transfer Job
+//   - options - DataTransferJobsClientResumeOptions contains the optional parameters for the DataTransferJobsClient.Resume method.
 func (client *DataTransferJobsClient) Resume(ctx context.Context, resourceGroupName string, accountName string, jobName string, options *DataTransferJobsClientResumeOptions) (DataTransferJobsClientResumeResponse, error) {
 	req, err := client.resumeCreateRequest(ctx, resourceGroupName, accountName, jobName, options)
 	if err != nil {
 		return DataTransferJobsClientResumeResponse{}, err
 	}
-	resp, err := client.pl.Do(req)
+	resp, err := client.internal.Pipeline().Do(req)
 	if err != nil {
 		return DataTransferJobsClientResumeResponse{}, err
 	}
@@ -409,12 +404,12 @@ func (client *DataTransferJobsClient) resumeCreateRequest(ctx context.Context, r
 		return nil, errors.New("parameter jobName cannot be empty")
 	}
 	urlPath = strings.ReplaceAll(urlPath, "{jobName}", url.PathEscape(jobName))
-	req, err := runtime.NewRequest(ctx, http.MethodPost, runtime.JoinPaths(client.host, urlPath))
+	req, err := runtime.NewRequest(ctx, http.MethodPost, runtime.JoinPaths(client.internal.Endpoint(), urlPath))
 	if err != nil {
 		return nil, err
 	}
 	reqQP := req.Raw().URL.Query()
-	reqQP.Set("api-version", "2022-08-15-preview")
+	reqQP.Set("api-version", "2023-03-15-preview")
 	req.Raw().URL.RawQuery = reqQP.Encode()
 	req.Raw().Header["Accept"] = []string{"application/json"}
 	return req, nil

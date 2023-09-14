@@ -5,43 +5,47 @@ package azeventhubs
 
 import "context"
 
-// ProcessorPartitionClient allows you to receive events, similar to a PartitionClient, with
-// integration into a checkpoint store for tracking progress.
+// ProcessorPartitionClient allows you to receive events, similar to a [PartitionClient], with a
+// checkpoint store for tracking progress.
 //
-// This type is instantiated from [Processor.NextPartitionClient], which handles dynamic load balancing.
+// This type is instantiated from [Processor.NextPartitionClient], which handles load balancing
+// of partition ownership between multiple [Processor] instances.
 //
-// See [example_processor_test.go] for an example of typical usage.
+// See [example_consuming_with_checkpoints_test.go] for an example.
 //
 // NOTE: If you do NOT want to use dynamic load balancing, and would prefer to track state and ownership
-// manually, use the [ConsumerClient] type instead.
+// manually, use the [ConsumerClient] instead.
 //
-// [example_processor_test.go]: https://github.com/Azure/azure-sdk-for-go/blob/main/sdk/messaging/azeventhubs/example_processor_test.go
+// [example_consuming_with_checkpoints_test.go]: https://github.com/Azure/azure-sdk-for-go/blob/main/sdk/messaging/azeventhubs/example_consuming_with_checkpoints_test.go
 type ProcessorPartitionClient struct {
 	partitionID           string
-	innerClient           *PartitionClient // *azeventhubs.PartitionClient
+	innerClient           *PartitionClient
 	checkpointStore       CheckpointStore
 	cleanupFn             func()
 	consumerClientDetails consumerClientDetails
 }
 
-// ReceiveEvents receives events until 'count' events have been received or the context has
-// expired or been cancelled.
+// ReceiveEvents receives events until 'count' events have been received or the context
+// has been cancelled.
 //
 // See [PartitionClient.ReceiveEvents] for more information, including troubleshooting.
 func (c *ProcessorPartitionClient) ReceiveEvents(ctx context.Context, count int, options *ReceiveEventsOptions) ([]*ReceivedEventData, error) {
 	return c.innerClient.ReceiveEvents(ctx, count, options)
 }
 
-// UpdateCheckpoint updates the checkpoint store. This ensure that if the Processor is restarted it will
-// start from after this point.
-func (p *ProcessorPartitionClient) UpdateCheckpoint(ctx context.Context, latestEvent *ReceivedEventData) error {
-	return p.checkpointStore.UpdateCheckpoint(ctx, Checkpoint{
+// UpdateCheckpoint updates the checkpoint in the CheckpointStore. New Processors will resume after
+// this checkpoint for this partition.
+func (p *ProcessorPartitionClient) UpdateCheckpoint(ctx context.Context, latestEvent *ReceivedEventData, options *UpdateCheckpointOptions) error {
+	seq := latestEvent.SequenceNumber
+	offset := latestEvent.Offset
+
+	return p.checkpointStore.SetCheckpoint(ctx, Checkpoint{
 		ConsumerGroup:           p.consumerClientDetails.ConsumerGroup,
 		EventHubName:            p.consumerClientDetails.EventHubName,
 		FullyQualifiedNamespace: p.consumerClientDetails.FullyQualifiedNamespace,
 		PartitionID:             p.partitionID,
-		SequenceNumber:          &latestEvent.SequenceNumber,
-		Offset:                  latestEvent.Offset,
+		SequenceNumber:          &seq,
+		Offset:                  &offset,
 	}, nil)
 }
 
@@ -61,4 +65,9 @@ func (c *ProcessorPartitionClient) Close(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// UpdateCheckpointOptions contains optional parameters for the [ProcessorPartitionClient.UpdateCheckpoint] function.
+type UpdateCheckpointOptions struct {
+	// For future expansion
 }

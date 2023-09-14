@@ -237,38 +237,8 @@ func (r *Recording) UUID() uuid.UUID {
 // GenerateAlphaNumericID will generate a recorded random alpha numeric id
 // if the recording has a randomSeed already set, the value will be generated from that seed, else a new random seed will be used
 func (r *Recording) GenerateAlphaNumericID(prefix string, length int, lowercaseOnly bool) (string, error) {
-
-	if length <= len(prefix) {
-		return "", errors.New("length must be greater than prefix")
-	}
-
 	r.initRandomSource()
-
-	sb := strings.Builder{}
-	sb.Grow(length)
-	sb.WriteString(prefix)
-	i := length - len(prefix) - 1
-	// A src.Int63() generates 63 random bits, enough for letterIdxMax characters!
-	for cache, remain := r.src.Int63(), letterIdxMax; i >= 0; {
-		if remain == 0 {
-			cache, remain = r.src.Int63(), letterIdxMax
-		}
-		if lowercaseOnly {
-			if idx := int(cache & letterIdxMask); idx < len(alphanumericLowercaseBytes) {
-				sb.WriteByte(alphanumericLowercaseBytes[idx])
-				i--
-			}
-		} else {
-			if idx := int(cache & letterIdxMask); idx < len(alphanumericBytes) {
-				sb.WriteByte(alphanumericBytes[idx])
-				i--
-			}
-		}
-		cache >>= letterIdxBits
-		remain--
-	}
-	str := sb.String()
-	return str, nil
+	return generateAlphaNumericID(prefix, length, lowercaseOnly, r.src)
 }
 
 // getRequiredEnv gets an environment variable by name and returns an error if it is not found
@@ -496,22 +466,27 @@ func init() {
 	}
 }
 
-var recordMode string
-var rootCAs *x509.CertPool
+var (
+	recordMode string
+	rootCAs    *x509.CertPool
+)
 
 const (
-	RecordingMode     = "record"
-	PlaybackMode      = "playback"
-	LiveMode          = "live"
-	IDHeader          = "x-recording-id"
-	ModeHeader        = "x-recording-mode"
-	UpstreamURIHeader = "x-recording-upstream-base-uri"
+	RecordingMode           = "record"
+	PlaybackMode            = "playback"
+	LiveMode                = "live"
+	IDHeader                = "x-recording-id"
+	ModeHeader              = "x-recording-mode"
+	UpstreamURIHeader       = "x-recording-upstream-base-uri"
+	recordingRandSeedVarKey = "randSeed"
 )
 
 type recordedTest struct {
-	recordingId string
-	liveOnly    bool
-	variables   map[string]interface{}
+	recordingId      string
+	liveOnly         bool
+	variables        map[string]interface{}
+	recordingSeed    int64
+	recordingRandSrc rand.Source
 }
 
 // testMap maps test names to metadata
@@ -534,6 +509,11 @@ func (t *testMap) Store(name string, data recordedTest) {
 	t.m.Store(name, data)
 }
 
+// Remove delete metadata for the named test
+func (t *testMap) Remove(name string) {
+	t.m.Delete(name)
+}
+
 var testSuite = testMap{&sync.Map{}}
 
 var client = http.Client{
@@ -544,6 +524,7 @@ var client = http.Client{
 
 type RecordingOptions struct {
 	UseHTTPS        bool
+	ProxyPort       int
 	GroupForReplace string
 	Variables       map[string]interface{}
 	TestInstance    *testing.T
@@ -551,7 +532,8 @@ type RecordingOptions struct {
 
 func defaultOptions() *RecordingOptions {
 	return &RecordingOptions{
-		UseHTTPS: true,
+		UseHTTPS:  true,
+		ProxyPort: os.Getpid()%10000 + 20000,
 	}
 }
 
@@ -578,6 +560,10 @@ func (r RecordingOptions) ReplaceAuthority(t *testing.T, rawReq *http.Request) *
 }
 
 func (r RecordingOptions) host() string {
+	if r.ProxyPort != 0 {
+		return fmt.Sprintf("localhost:%d", r.ProxyPort)
+	}
+
 	if r.UseHTTPS {
 		return "localhost:5001"
 	}
@@ -609,7 +595,7 @@ func getGitRoot(fromPath string) (string, error) {
 
 	root, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("Unable to find git root for path '%s'", absPath)
+		return "", fmt.Errorf("unable to find git root for path '%s'", absPath)
 	}
 
 	// Wrap with Abs() to get os-specific path separators to support sub-path matching
@@ -687,7 +673,6 @@ func requestStart(url string, testId string, assetConfigLocation string) (*http.
 	return client.Do(req)
 }
 
-// Start tells the test proxy to begin accepting requests for a given test
 func Start(t *testing.T, pathToRecordings string, options *RecordingOptions) error {
 	if options == nil {
 		options = defaultOptions()
@@ -778,6 +763,12 @@ func Stop(t *testing.T, options *RecordingOptions) error {
 			// test should only be run live, don't want to generate recording
 			return nil
 		}
+		if testStruct.recordingSeed != 0 {
+			if options.Variables == nil {
+				options.Variables = map[string]interface{}{}
+			}
+			options.Variables[recordingRandSeedVarKey] = strconv.FormatInt(testStruct.recordingSeed, 10)
+		}
 	}
 
 	url := fmt.Sprintf("%v/%v/stop", options.baseURL(), recordMode)
@@ -801,7 +792,11 @@ func Stop(t *testing.T, options *RecordingOptions) error {
 		return errors.New("Recording ID was never set. Did you call StartRecording?")
 	}
 	req.Header.Set(IDHeader, recTest.recordingId)
+	testSuite.Remove(t.Name())
 	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
 	if resp.StatusCode != 200 {
 		b, err := io.ReadAll(resp.Body)
 		defer resp.Body.Close()
@@ -814,7 +809,76 @@ func Stop(t *testing.T, options *RecordingOptions) error {
 	return err
 }
 
-// This looks up an environment variable and if it is not found, returns the recordedValue
+func getRandomSource(t *testing.T) rand.Source {
+	if testStruct, ok := testSuite.Load(t.Name()); ok {
+		if testStruct.recordingRandSrc != nil {
+			return testStruct.recordingRandSrc
+		}
+	}
+
+	var seed int64
+	var err error
+
+	variables := GetVariables(t)
+	seedString, ok := variables[recordingRandSeedVarKey]
+	if ok {
+		seed, err = strconv.ParseInt(seedString.(string), 10, 64)
+	}
+
+	// We did not have a random seed already stored; create a new one
+	if !ok || err != nil || GetRecordMode() == "live" {
+		seed = time.Now().Unix()
+	}
+
+	source := rand.NewSource(seed)
+	if testStruct, ok := testSuite.Load(t.Name()); ok {
+		testStruct.recordingSeed = seed
+		testStruct.recordingRandSrc = source
+		testSuite.Store(t.Name(), testStruct)
+	}
+
+	return source
+}
+
+// GenerateAlphaNumericID will generate a recorded random alpha numeric id.
+// When live mode or the recording has a randomSeed already set, the value will be generated from that seed, else a new random seed will be used.
+func GenerateAlphaNumericID(t *testing.T, prefix string, length int, lowercaseOnly bool) (string, error) {
+	return generateAlphaNumericID(prefix, length, lowercaseOnly, getRandomSource(t))
+}
+
+func generateAlphaNumericID(prefix string, length int, lowercaseOnly bool, randomSource rand.Source) (string, error) {
+	if length <= len(prefix) {
+		return "", errors.New("length must be greater than prefix")
+	}
+
+	sb := strings.Builder{}
+	sb.Grow(length)
+	sb.WriteString(prefix)
+	i := length - len(prefix) - 1
+	// A src.Int63() generates 63 random bits, enough for letterIdxMax characters!
+	for cache, remain := randomSource.Int63(), letterIdxMax; i >= 0; {
+		if remain == 0 {
+			cache, remain = randomSource.Int63(), letterIdxMax
+		}
+		if lowercaseOnly {
+			if idx := int(cache & letterIdxMask); idx < len(alphanumericLowercaseBytes) {
+				sb.WriteByte(alphanumericLowercaseBytes[idx])
+				i--
+			}
+		} else {
+			if idx := int(cache & letterIdxMask); idx < len(alphanumericBytes) {
+				sb.WriteByte(alphanumericBytes[idx])
+				i--
+			}
+		}
+		cache >>= letterIdxBits
+		remain--
+	}
+	str := sb.String()
+	return str, nil
+}
+
+// GetEnvVariable looks up an environment variable and if it is not found, returns the recordedValue
 func GetEnvVariable(varName string, recordedValue string) string {
 	val, ok := os.LookupEnv(varName)
 	if !ok || GetRecordMode() == PlaybackMode {
@@ -835,7 +899,7 @@ func LiveOnly(t *testing.T) {
 	}
 }
 
-// Function for sleeping during a test for `duration` seconds. This method will only execute when
+// Sleep during a test for `duration` seconds. This method will only execute when
 // AZURE_RECORD_MODE = "record", if a test is running in playback this will be a noop.
 func Sleep(duration time.Duration) {
 	if GetRecordMode() != PlaybackMode {
@@ -884,7 +948,7 @@ func (c RecordingHTTPClient) Do(req *http.Request) (*http.Response, error) {
 // NewRecordingHTTPClient returns a type that implements `azcore.Transporter`. This will automatically route tests on the `Do` call.
 func NewRecordingHTTPClient(t *testing.T, options *RecordingOptions) (*RecordingHTTPClient, error) {
 	if options == nil {
-		options = &RecordingOptions{UseHTTPS: true}
+		options = defaultOptions()
 	}
 	c, err := GetHTTPClient(t)
 	if err != nil {

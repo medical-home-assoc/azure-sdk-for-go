@@ -14,8 +14,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus/admin"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus/internal"
-	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus/internal/go-amqp"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus/internal/test"
+	"github.com/Azure/go-amqp"
 	"github.com/stretchr/testify/require"
 )
 
@@ -327,8 +327,7 @@ func TestSessionReceiver_Detach(t *testing.T) {
 		}})
 	defer cleanup()
 
-	stopFn := test.EnableStdoutLogging()
-	defer stopFn()
+	test.EnableStdoutLogging(t)
 
 	adminClient, err := admin.NewClientFromConnectionString(test.GetConnectionString(t), nil)
 	require.NoError(t, err)

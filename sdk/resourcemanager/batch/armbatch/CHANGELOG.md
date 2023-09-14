@@ -1,5 +1,28 @@
 # Release History
 
+## 2.0.0 (2023-07-28)
+### Breaking Changes
+
+- Type of `ContainerConfiguration.Type` has been changed from `*string` to `*ContainerType`
+
+### Features Added
+
+- New enum type `ContainerType` with values `ContainerTypeCriCompatible`, `ContainerTypeDockerCompatible`
+- New field `EnableAcceleratedNetworking` in struct `NetworkConfiguration`
+- New field `EnableAutomaticUpgrade` in struct `VMExtension`
+
+
+## 1.2.1 (2023-04-14)
+### Bug Fixes
+
+- Fix serialization bug of empty value of `any` type.
+
+## 1.2.0 (2023-03-27)
+### Features Added
+
+- New struct `ClientFactory` which is a client factory used to create any client in this module
+
+
 ## 1.1.0 (2022-11-10)
 ### Features Added
 

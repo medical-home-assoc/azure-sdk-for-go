@@ -8,6 +8,7 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -22,9 +23,11 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/pollers"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/pollers/async"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/pollers/body"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/pollers/fake"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/internal/shared"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/mock"
+	"github.com/Azure/azure-sdk-for-go/sdk/internal/poller"
 	"github.com/stretchr/testify/require"
 )
 
@@ -390,25 +393,13 @@ func TestOpPollerWithWidgetPUT(t *testing.T) {
 	}
 }
 
-type nonRetriableError struct {
-	Msg string
-}
-
-func (n *nonRetriableError) Error() string {
-	return n.Msg
-}
-
-func (*nonRetriableError) NonRetriable() {
-	// prevent the retry policy from masking this transient error
-}
-
 func TestOpPollerWithWidgetFinalGetError(t *testing.T) {
 	srv, close := mock.NewServer()
 	srv.AppendResponse(mock.WithStatusCode(http.StatusAccepted), mock.WithBody([]byte(`{"status": "InProgress"}`)))
 	srv.AppendResponse(mock.WithStatusCode(http.StatusOK), mock.WithBody([]byte(`{"status": "Succeeded"}`)))
 	// PUT and PATCH state that a final GET will happen
 	// the first attempt at a final GET returns an error
-	srv.AppendError(&nonRetriableError{Msg: "failed attempt"})
+	srv.AppendError(shared.NonRetriableError(errors.New("failed attempt")))
 	srv.AppendResponse(mock.WithStatusCode(http.StatusOK), mock.WithBody([]byte(`{"size": 2}`)))
 	defer close()
 
@@ -770,8 +761,8 @@ func getPipeline(srv *mock.Server) Pipeline {
 	)
 }
 
-func initialResponse(method, u string, resp io.Reader) (*http.Response, mock.TrackedClose) {
-	req, err := http.NewRequest(method, u, nil)
+func initialResponse(ctx context.Context, method, u string, resp io.Reader) (*http.Response, mock.TrackedClose) {
+	req, err := http.NewRequestWithContext(ctx, method, u, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -794,7 +785,7 @@ func TestNewPollerAsync(t *testing.T) {
 	srv.AppendResponse(mock.WithBody([]byte(statusInProgress)))
 	srv.AppendResponse(mock.WithBody([]byte(statusSucceeded)))
 	srv.AppendResponse(mock.WithBody([]byte(successResp)))
-	resp, closed := initialResponse(http.MethodPut, srv.URL(), strings.NewReader(provStateStarted))
+	resp, closed := initialResponse(context.Background(), http.MethodPut, srv.URL(), strings.NewReader(provStateStarted))
 	resp.Header.Set(shared.HeaderAzureAsync, srv.URL())
 	resp.StatusCode = http.StatusCreated
 	pl := getPipeline(srv)
@@ -837,7 +828,7 @@ func TestNewPollerBody(t *testing.T) {
 	defer close()
 	srv.AppendResponse(mock.WithBody([]byte(provStateUpdating)), mock.WithHeader("Retry-After", "1"))
 	srv.AppendResponse(mock.WithBody([]byte(provStateSucceeded)))
-	resp, closed := initialResponse(http.MethodPatch, srv.URL(), strings.NewReader(provStateStarted))
+	resp, closed := initialResponse(context.Background(), http.MethodPatch, srv.URL(), strings.NewReader(provStateStarted))
 	resp.StatusCode = http.StatusCreated
 	pl := getPipeline(srv)
 	poller, err := NewPoller[mockType](resp, pl, nil)
@@ -873,7 +864,7 @@ func TestNewPollerInitialRetryAfter(t *testing.T) {
 	srv.AppendResponse(mock.WithBody([]byte(statusInProgress)))
 	srv.AppendResponse(mock.WithBody([]byte(statusSucceeded)))
 	srv.AppendResponse(mock.WithBody([]byte(successResp)))
-	resp, closed := initialResponse(http.MethodPut, srv.URL(), strings.NewReader(provStateStarted))
+	resp, closed := initialResponse(context.Background(), http.MethodPut, srv.URL(), strings.NewReader(provStateStarted))
 	resp.Header.Set(shared.HeaderAzureAsync, srv.URL())
 	resp.Header.Set("Retry-After", "1")
 	resp.StatusCode = http.StatusCreated
@@ -902,7 +893,7 @@ func TestNewPollerCanceled(t *testing.T) {
 	defer close()
 	srv.AppendResponse(mock.WithBody([]byte(statusInProgress)))
 	srv.AppendResponse(mock.WithBody([]byte(statusCanceled)), mock.WithStatusCode(http.StatusOK))
-	resp, closed := initialResponse(http.MethodPut, srv.URL(), strings.NewReader(provStateStarted))
+	resp, closed := initialResponse(context.Background(), http.MethodPut, srv.URL(), strings.NewReader(provStateStarted))
 	resp.Header.Set(shared.HeaderAzureAsync, srv.URL())
 	resp.StatusCode = http.StatusCreated
 	pl := getPipeline(srv)
@@ -940,7 +931,7 @@ func TestNewPollerFailed(t *testing.T) {
 	srv, close := mock.NewServer()
 	defer close()
 	srv.AppendResponse(mock.WithBody([]byte(provStateFailed)))
-	resp, closed := initialResponse(http.MethodPut, srv.URL(), strings.NewReader(provStateStarted))
+	resp, closed := initialResponse(context.Background(), http.MethodPut, srv.URL(), strings.NewReader(provStateStarted))
 	resp.Header.Set(shared.HeaderAzureAsync, srv.URL())
 	resp.StatusCode = http.StatusCreated
 	pl := getPipeline(srv)
@@ -965,7 +956,7 @@ func TestNewPollerFailedWithError(t *testing.T) {
 	defer close()
 	srv.AppendResponse(mock.WithBody([]byte(statusInProgress)))
 	srv.AppendResponse(mock.WithStatusCode(http.StatusBadRequest))
-	resp, closed := initialResponse(http.MethodPut, srv.URL(), strings.NewReader(provStateStarted))
+	resp, closed := initialResponse(context.Background(), http.MethodPut, srv.URL(), strings.NewReader(provStateStarted))
 	resp.Header.Set(shared.HeaderAzureAsync, srv.URL())
 	resp.StatusCode = http.StatusCreated
 	pl := getPipeline(srv)
@@ -990,7 +981,7 @@ func TestNewPollerSuccessNoContent(t *testing.T) {
 	defer close()
 	srv.AppendResponse(mock.WithBody([]byte(provStateUpdating)))
 	srv.AppendResponse(mock.WithStatusCode(http.StatusNoContent))
-	resp, closed := initialResponse(http.MethodPatch, srv.URL(), strings.NewReader(provStateStarted))
+	resp, closed := initialResponse(context.Background(), http.MethodPatch, srv.URL(), strings.NewReader(provStateStarted))
 	resp.StatusCode = http.StatusCreated
 	pl := getPipeline(srv)
 	poller, err := NewPoller[mockType](resp, pl, nil)
@@ -1023,7 +1014,7 @@ func TestNewPollerSuccessNoContent(t *testing.T) {
 func TestNewPollerFail202NoHeaders(t *testing.T) {
 	srv, close := mock.NewServer()
 	defer close()
-	resp, closed := initialResponse(http.MethodDelete, srv.URL(), http.NoBody)
+	resp, closed := initialResponse(context.Background(), http.MethodDelete, srv.URL(), http.NoBody)
 	resp.StatusCode = http.StatusAccepted
 	pl := getPipeline(srv)
 	poller, err := NewPoller[mockType](resp, pl, nil)
@@ -1048,7 +1039,7 @@ func TestNewPollerWithResponseType(t *testing.T) {
 	defer close()
 	srv.AppendResponse(mock.WithBody([]byte(provStateUpdating)), mock.WithHeader("Retry-After", "1"))
 	srv.AppendResponse(mock.WithBody([]byte(provStateSucceeded)))
-	resp, closed := initialResponse(http.MethodPatch, srv.URL(), strings.NewReader(provStateStarted))
+	resp, closed := initialResponse(context.Background(), http.MethodPatch, srv.URL(), strings.NewReader(provStateStarted))
 	resp.StatusCode = http.StatusCreated
 	pl := getPipeline(srv)
 	poller, err := NewPoller[preconstructedMockType](resp, pl, nil)
@@ -1083,4 +1074,134 @@ func TestNewPollerWithResponseType(t *testing.T) {
 	if result.Preconstructed != 12345 {
 		t.Fatalf("unexpected value %d", result.Preconstructed)
 	}
+}
+
+// purposefully looks like an async poller but isn't
+type customHandler struct {
+	PollURL string `json:"asyncURL"`
+	State   string `json:"state"`
+	p       Pipeline
+}
+
+func (c *customHandler) Done() bool {
+	return c.State == "Succeeded"
+}
+
+func (c *customHandler) Poll(ctx context.Context) (*http.Response, error) {
+	req, err := NewRequest(ctx, http.MethodGet, c.PollURL)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.p.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	body, err := Payload(resp)
+	if err != nil {
+		return nil, err
+	}
+	type statusMon struct {
+		Status string `json:"status"`
+	}
+	var sm statusMon
+	if err = json.Unmarshal(body, &sm); err != nil {
+		return nil, err
+	}
+	c.State = sm.Status
+	return resp, nil
+}
+
+func (c *customHandler) Result(ctx context.Context, out *mockType) error {
+	req, err := NewRequest(ctx, http.MethodGet, c.PollURL)
+	if err != nil {
+		return err
+	}
+	resp, err := c.p.Do(req)
+	if err != nil {
+		return err
+	}
+	body, err := Payload(resp)
+	if err != nil {
+		return err
+	}
+	if err = json.Unmarshal(body, out); err != nil {
+		return err
+	}
+	return nil
+}
+
+func TestNewPollerWithCustomHandler(t *testing.T) {
+	srv, close := mock.NewServer()
+	defer close()
+	srv.AppendResponse(mock.WithBody([]byte(statusInProgress)))
+	srv.AppendResponse(mock.WithBody([]byte(statusSucceeded)))
+	srv.AppendResponse(mock.WithBody([]byte(successResp)))
+	resp, closed := initialResponse(context.Background(), http.MethodPut, srv.URL(), strings.NewReader(provStateStarted))
+	resp.Header.Set(shared.HeaderAzureAsync, srv.URL())
+	resp.StatusCode = http.StatusCreated
+	pl := getPipeline(srv)
+	poller, err := NewPoller(resp, pl, &NewPollerOptions[mockType]{
+		Handler: &customHandler{
+			PollURL: srv.URL(),
+			State:   "InProgress",
+			p:       pl,
+		},
+	})
+	require.NoError(t, err)
+	require.False(t, closed())
+	require.IsType(t, &customHandler{}, poller.op)
+	tk, err := poller.ResumeToken()
+	require.NoError(t, err)
+	poller, err = NewPollerFromResumeToken(tk, pl, &NewPollerFromResumeTokenOptions[mockType]{
+		Handler: &customHandler{
+			p: pl,
+		},
+	})
+	require.IsType(t, &customHandler{}, poller.op)
+	require.NoError(t, err)
+	result, err := poller.PollUntilDone(context.Background(), &PollUntilDoneOptions{Frequency: time.Millisecond})
+	require.NoError(t, err)
+	require.EqualValues(t, "value", *result.Field)
+	result, err = poller.Result(context.Background())
+	require.NoError(t, err)
+	require.EqualValues(t, "value", *result.Field)
+}
+
+func TestShortenPollerTypeName(t *testing.T) {
+	result := shortenTypeName("Poller[module/package.ClientOperationResponse].PollUntilDone")
+	require.EqualValues(t, "Poller[ClientOperationResponse].PollUntilDone", result)
+
+	result = shortenTypeName("Poller[package.ClientOperationResponse].PollUntilDone")
+	require.EqualValues(t, "Poller[ClientOperationResponse].PollUntilDone", result)
+
+	result = shortenTypeName("Poller[ClientOperationResponse].PollUntilDone")
+	require.EqualValues(t, "Poller[ClientOperationResponse].PollUntilDone", result)
+
+	result = shortenTypeName("Poller.PollUntilDone")
+	require.EqualValues(t, "Poller.PollUntilDone", result)
+}
+
+func TestNewFakePoller(t *testing.T) {
+	srv, close := mock.NewServer()
+	defer close()
+	srv.AppendResponse(mock.WithHeader(shared.HeaderFakePollerStatus, "FakePollerInProgress"))
+	srv.AppendResponse(mock.WithHeader(shared.HeaderFakePollerStatus, poller.StatusSucceeded), mock.WithStatusCode(http.StatusNoContent))
+	pollCtx := context.WithValue(context.Background(), shared.CtxAPINameKey{}, "FakeAPI")
+	resp, closed := initialResponse(pollCtx, http.MethodPatch, srv.URL(), http.NoBody)
+	resp.StatusCode = http.StatusCreated
+	resp.Header.Set(shared.HeaderFakePollerStatus, "FakePollerInProgress")
+	pl := getPipeline(srv)
+	poller, err := NewPoller[mockType](resp, pl, nil)
+	require.NoError(t, err)
+	require.True(t, closed())
+	if pt := typeOfOpField(poller); pt != reflect.TypeOf((*fake.Poller[mockType])(nil)) {
+		t.Fatalf("unexpected poller type %s", pt.String())
+	}
+	tk, err := poller.ResumeToken()
+	require.NoError(t, err)
+	poller, err = NewPollerFromResumeToken[mockType](tk, pl, nil)
+	require.NoError(t, err)
+	result, err := poller.PollUntilDone(context.Background(), &PollUntilDoneOptions{Frequency: time.Millisecond})
+	require.NoError(t, err)
+	require.Nil(t, result.Field)
 }

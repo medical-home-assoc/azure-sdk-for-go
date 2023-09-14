@@ -8,7 +8,6 @@ package shared
 
 import (
 	"context"
-	"io"
 	"net/http"
 	"reflect"
 	"testing"
@@ -71,68 +70,6 @@ func TestTypeOfT(t *testing.T) {
 	}
 }
 
-func TestNopClosingBytesReader(t *testing.T) {
-	const val1 = "the data"
-	ncbr := NewNopClosingBytesReader([]byte(val1))
-	if ncbr.Bytes() == nil {
-		t.Fatal("unexpected nil value")
-	}
-	b, err := io.ReadAll(ncbr)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(b) != val1 {
-		t.Fatalf("got %s, want %s", string(b), val1)
-	}
-	const val2 = "something else"
-	ncbr.Set([]byte(val2))
-	b, err = io.ReadAll(ncbr)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(b) != val2 {
-		t.Fatalf("got %s, want %s", string(b), val2)
-	}
-	if err = ncbr.Close(); err != nil {
-		t.Fatal(err)
-	}
-	// seek to beginning and read again
-	i, err := ncbr.Seek(0, io.SeekStart)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if i != 0 {
-		t.Fatalf("got %d, want %d", i, 0)
-	}
-	b, err = io.ReadAll(ncbr)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(b) != val2 {
-		t.Fatalf("got %s, want %s", string(b), val2)
-	}
-	// seek to middle from the end
-	i, err = ncbr.Seek(-4, io.SeekEnd)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if l := int64(len(val2)) - 4; i != l {
-		t.Fatalf("got %d, want %d", l, i)
-	}
-	b, err = io.ReadAll(ncbr)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(b) != "else" {
-		t.Fatalf("got %s, want %s", string(b), "else")
-	}
-	// underflow
-	_, err = ncbr.Seek(-int64(len(val2)+1), io.SeekCurrent)
-	if err == nil {
-		t.Fatal("unexpected nil error")
-	}
-}
-
 func TestTransportFunc(t *testing.T) {
 	resp, err := TransportFunc(func(req *http.Request) (*http.Response, error) {
 		return nil, nil
@@ -148,24 +85,54 @@ func TestValidateModVer(t *testing.T) {
 	require.Error(t, ValidateModVer("v1.2"))
 }
 
-func TestExtractPackageName(t *testing.T) {
-	pkg, err := ExtractPackageName("package.Client")
+func TestExtractModuleName(t *testing.T) {
+	mod, client, err := ExtractModuleName("module/package.Client")
 	require.NoError(t, err)
-	require.Equal(t, "package", pkg)
+	require.Equal(t, "module", mod)
+	require.Equal(t, "package.Client", client)
 
-	pkg, err = ExtractPackageName("malformed")
+	mod, client, err = ExtractModuleName("malformed/")
 	require.Error(t, err)
-	require.Empty(t, pkg)
+	require.Empty(t, mod)
+	require.Empty(t, client)
 
-	pkg, err = ExtractPackageName(".malformed")
+	mod, client, err = ExtractModuleName("malformed/malformed")
 	require.Error(t, err)
-	require.Empty(t, pkg)
+	require.Empty(t, mod)
+	require.Empty(t, client)
 
-	pkg, err = ExtractPackageName("malformed.")
+	mod, client, err = ExtractModuleName("malformed/malformed.")
 	require.Error(t, err)
-	require.Empty(t, pkg)
+	require.Empty(t, mod)
+	require.Empty(t, client)
 
-	pkg, err = ExtractPackageName("")
+	mod, client, err = ExtractModuleName("malformed/.malformed")
 	require.Error(t, err)
-	require.Empty(t, pkg)
+	require.Empty(t, mod)
+	require.Empty(t, client)
+
+	mod, client, err = ExtractModuleName("package.Client")
+	require.NoError(t, err)
+	require.Equal(t, "package", mod)
+	require.Equal(t, "package.Client", client)
+
+	mod, client, err = ExtractModuleName("malformed")
+	require.Error(t, err)
+	require.Empty(t, mod)
+	require.Empty(t, client)
+
+	mod, client, err = ExtractModuleName(".malformed")
+	require.Error(t, err)
+	require.Empty(t, mod)
+	require.Empty(t, client)
+
+	mod, client, err = ExtractModuleName("malformed.")
+	require.Error(t, err)
+	require.Empty(t, mod)
+	require.Empty(t, client)
+
+	mod, client, err = ExtractModuleName("")
+	require.Error(t, err)
+	require.Empty(t, mod)
+	require.Empty(t, client)
 }

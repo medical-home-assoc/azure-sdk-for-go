@@ -7,6 +7,7 @@
 package azcontainerregistry
 
 const (
-	moduleName    = "azcontainerregistry"
-	moduleVersion = "v0.1.1"
+	moduleName      = "azcontainerregistry"
+	moduleVersion   = "v0.2.1"
+	defaultAudience = "https://containerregistry.azure.net"
 )

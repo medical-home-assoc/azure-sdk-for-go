@@ -16,9 +16,9 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azeventhubs/internal/amqpwrap"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azeventhubs/internal/auth"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azeventhubs/internal/exported"
-	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azeventhubs/internal/go-amqp"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azeventhubs/internal/sbauth"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azeventhubs/internal/test"
+	"github.com/Azure/go-amqp"
 	"github.com/stretchr/testify/require"
 )
 
@@ -67,14 +67,14 @@ func TestNamespaceNegotiateClaim(t *testing.T) {
 
 	cbsNegotiateClaimCalled := 0
 
-	cbsNegotiateClaim := func(ctx context.Context, audience string, conn amqpwrap.AMQPClient, provider auth.TokenProvider, contextWithTimeoutFn contextWithTimeoutFn) error {
+	cbsNegotiateClaim := func(ctx context.Context, audience string, conn amqpwrap.AMQPClient, provider auth.TokenProvider) error {
 		cbsNegotiateClaimCalled++
 		return nil
 	}
 
 	newAMQPClientCalled := 0
 
-	ns.newClientFn = func(ctx context.Context) (amqpwrap.AMQPClient, error) {
+	ns.newClientFn = func(ctx context.Context, connID uint64) (amqpwrap.AMQPClient, error) {
 		newAMQPClientCalled++
 		return &amqpwrap.AMQPClientWrapper{}, nil
 	}
@@ -111,7 +111,7 @@ func TestNamespaceNegotiateClaimRenewal(t *testing.T) {
 
 	cbsNegotiateClaimCalled := 0
 
-	cbsNegotiateClaim := func(ctx context.Context, audience string, conn amqpwrap.AMQPClient, provider auth.TokenProvider, contextWithTimeoutFn contextWithTimeoutFn) error {
+	cbsNegotiateClaim := func(ctx context.Context, audience string, conn amqpwrap.AMQPClient, provider auth.TokenProvider) error {
 		cbsNegotiateClaimCalled++
 		return nil
 	}
@@ -119,8 +119,8 @@ func TestNamespaceNegotiateClaimRenewal(t *testing.T) {
 	var errorsLogged []error
 	nextRefreshDurationChecks := 0
 
-	ns.newClientFn = func(ctx context.Context) (amqpwrap.AMQPClient, error) {
-		return &amqpwrap.AMQPClientWrapper{Inner: &amqp.Client{}}, nil
+	ns.newClientFn = func(ctx context.Context, connID uint64) (amqpwrap.AMQPClient, error) {
+		return &amqpwrap.AMQPClientWrapper{Inner: &amqp.Conn{}}, nil
 	}
 
 	cancel, _, err := ns.startNegotiateClaimRenewer(
@@ -153,14 +153,14 @@ func TestNamespaceNegotiateClaimFailsToGetClient(t *testing.T) {
 		TokenProvider: sbauth.NewTokenProvider(&fakeTokenCredential{expires: time.Now()}),
 	}
 
-	ns.newClientFn = func(ctx context.Context) (amqpwrap.AMQPClient, error) {
+	ns.newClientFn = func(ctx context.Context, connID uint64) (amqpwrap.AMQPClient, error) {
 		return nil, errors.New("Getting *amqp.Client failed")
 	}
 
 	cancel, _, err := ns.startNegotiateClaimRenewer(
 		context.Background(),
 		"entity path",
-		func(ctx context.Context, audience string, conn amqpwrap.AMQPClient, provider auth.TokenProvider, contextWithTimeoutFn contextWithTimeoutFn) error {
+		func(ctx context.Context, audience string, conn amqpwrap.AMQPClient, provider auth.TokenProvider) error {
 			return errors.New("NegotiateClaim amqp.Client failed")
 		}, func(expirationTime, currentTime time.Time) time.Duration {
 			// refresh immediately since we're in a unit test.
@@ -182,13 +182,13 @@ func TestNamespaceNegotiateClaimNonRenewableToken(t *testing.T) {
 
 	cbsNegotiateClaimCalled := 0
 
-	cbsNegotiateClaim := func(ctx context.Context, audience string, conn amqpwrap.AMQPClient, provider auth.TokenProvider, contextWithTimeoutFn contextWithTimeoutFn) error {
+	cbsNegotiateClaim := func(ctx context.Context, audience string, conn amqpwrap.AMQPClient, provider auth.TokenProvider) error {
 		cbsNegotiateClaimCalled++
 		return nil
 	}
 
-	ns.newClientFn = func(ctx context.Context) (amqpwrap.AMQPClient, error) {
-		return &amqpwrap.AMQPClientWrapper{Inner: &amqp.Client{}}, nil
+	ns.newClientFn = func(ctx context.Context, connID uint64) (amqpwrap.AMQPClient, error) {
+		return &amqpwrap.AMQPClientWrapper{Inner: &amqp.Conn{}}, nil
 	}
 
 	// since the token is non-renewable we will just do the single cbsNegotiateClaim call and never renew.
@@ -215,14 +215,14 @@ func TestNamespaceNegotiateClaimFails(t *testing.T) {
 		TokenProvider: sbauth.NewTokenProvider(&fakeTokenCredential{expires: time.Now()}),
 	}
 
-	ns.newClientFn = func(ctx context.Context) (amqpwrap.AMQPClient, error) {
+	ns.newClientFn = func(ctx context.Context, connID uint64) (amqpwrap.AMQPClient, error) {
 		return &fakeAMQPClient{}, nil
 	}
 
 	cancel, _, err := ns.startNegotiateClaimRenewer(
 		context.Background(),
 		"entity path",
-		func(ctx context.Context, audience string, conn amqpwrap.AMQPClient, provider auth.TokenProvider, contextWithTimeoutFn contextWithTimeoutFn) error {
+		func(ctx context.Context, audience string, conn amqpwrap.AMQPClient, provider auth.TokenProvider) error {
 			return errors.New("NegotiateClaim amqp.Client failed")
 		}, func(expirationTime, currentTime time.Time) time.Duration {
 			// not even used.
@@ -240,7 +240,7 @@ func TestNamespaceNegotiateClaimFatalErrors(t *testing.T) {
 
 	cbsNegotiateClaimCalled := 0
 
-	cbsNegotiateClaim := func(ctx context.Context, audience string, conn amqpwrap.AMQPClient, provider auth.TokenProvider, contextWithTimeoutFn contextWithTimeoutFn) error {
+	cbsNegotiateClaim := func(ctx context.Context, audience string, conn amqpwrap.AMQPClient, provider auth.TokenProvider) error {
 		cbsNegotiateClaimCalled++
 
 		// work the first time, fail on renewals.
@@ -254,8 +254,8 @@ func TestNamespaceNegotiateClaimFatalErrors(t *testing.T) {
 	endCapture := test.CaptureLogsForTest()
 	defer endCapture()
 
-	ns.newClientFn = func(ctx context.Context) (amqpwrap.AMQPClient, error) {
-		return &amqpwrap.AMQPClientWrapper{Inner: &amqp.Client{}}, nil
+	ns.newClientFn = func(ctx context.Context, connID uint64) (amqpwrap.AMQPClient, error) {
+		return &amqpwrap.AMQPClientWrapper{Inner: &amqp.Conn{}}, nil
 	}
 
 	_, done, err := ns.startNegotiateClaimRenewer(
@@ -313,7 +313,7 @@ func TestNamespaceStaleConnection(t *testing.T) {
 	require.Equal(t, 1, fakeClient.closeCalled)
 	require.Nil(t, ns.client)
 
-	ns.newClientFn = func(ctx context.Context) (amqpwrap.AMQPClient, error) {
+	ns.newClientFn = func(ctx context.Context, connID uint64) (amqpwrap.AMQPClient, error) {
 		return &fakeAMQPClient{}, nil
 	}
 
@@ -330,7 +330,7 @@ func TestNamespaceUpdateClientWithoutLock(t *testing.T) {
 	var err error
 
 	ns := &Namespace{
-		newClientFn: func(ctx context.Context) (amqpwrap.AMQPClient, error) {
+		newClientFn: func(ctx context.Context, connID uint64) (amqpwrap.AMQPClient, error) {
 			newClient++
 			return clientToReturn, err
 		},
@@ -374,7 +374,7 @@ func TestNamespaceConnectionRecovery(t *testing.T) {
 		td := &testData{}
 		td.NS = &Namespace{
 			connID: 2,
-			newClientFn: func(ctx context.Context) (amqpwrap.AMQPClient, error) {
+			newClientFn: func(ctx context.Context, connID uint64) (amqpwrap.AMQPClient, error) {
 				td.NewClientCount++
 				return nil, td.FakeClientError
 			},
@@ -430,4 +430,44 @@ func TestNamespaceConnectionRecovery(t *testing.T) {
 		err = testData.NS.Recover(context.Background(), origConnID)
 		require.ErrorIs(t, err, ErrClientClosed)
 	})
+}
+
+func TestNamespaceCantStopRecoverFromClosingConn(t *testing.T) {
+	numCancels := 0
+	numClients := 0
+
+	ns := &Namespace{
+		newClientFn: func(ctx context.Context, connID uint64) (amqpwrap.AMQPClient, error) {
+			select {
+			case <-ctx.Done():
+				numCancels++
+				return nil, ctx.Err()
+			default:
+				numClients++
+				client := &fakeAMQPClient{}
+				return client, nil
+			}
+		},
+	}
+
+	conn, id, err := ns.GetAMQPClientImpl(context.Background())
+	require.NoError(t, err)
+	require.NotNil(t, conn)
+	require.Equal(t, uint64(1), id)
+
+	require.Equal(t, 1, numClients)
+	require.Equal(t, 0, numCancels)
+
+	canceledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err = ns.Recover(canceledCtx, id)
+
+	// two key things:
+	// 1. the old client gets closed, even when the 'ctx' is cancelled.
+	// 2. since the context is cancelled we don't create a new one.
+	require.ErrorIs(t, err, context.Canceled)
+	require.Equal(t, 1, numClients, "we did NOT create a new client")
+	require.Equal(t, 1, numCancels, "we cancelled a client creation")
+	require.False(t, ns.closedPermanently)
 }

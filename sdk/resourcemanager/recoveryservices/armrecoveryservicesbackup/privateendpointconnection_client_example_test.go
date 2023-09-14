@@ -15,21 +15,21 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
-	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/recoveryservices/armrecoveryservicesbackup/v2"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/recoveryservices/armrecoveryservicesbackup/v3"
 )
 
-// Generated from example definition: https://github.com/Azure/azure-rest-api-specs/blob/3751704f5318f1175875c94b66af769db917f2d3/specification/recoveryservicesbackup/resource-manager/Microsoft.RecoveryServices/stable/2023-01-01/examples/PrivateEndpointConnection/GetPrivateEndpointConnection.json
+// Generated from example definition: https://github.com/Azure/azure-rest-api-specs/blob/a4ddec441435d1ef766c4f160eda658a69cc5dc2/specification/recoveryservicesbackup/resource-manager/Microsoft.RecoveryServices/stable/2023-04-01/examples/PrivateEndpointConnection/GetPrivateEndpointConnection.json
 func ExamplePrivateEndpointConnectionClient_Get() {
 	cred, err := azidentity.NewDefaultAzureCredential(nil)
 	if err != nil {
 		log.Fatalf("failed to obtain a credential: %v", err)
 	}
 	ctx := context.Background()
-	client, err := armrecoveryservicesbackup.NewPrivateEndpointConnectionClient("04cf684a-d41f-4550-9f70-7708a3a2283b", cred, nil)
+	clientFactory, err := armrecoveryservicesbackup.NewClientFactory("<subscription-id>", cred, nil)
 	if err != nil {
 		log.Fatalf("failed to create client: %v", err)
 	}
-	res, err := client.Get(ctx, "gaallavaultbvtd2msi", "gaallaRG", "gaallatestpe2.5704c932-249a-490b-a142-1396838cd3b", nil)
+	res, err := clientFactory.NewPrivateEndpointConnectionClient().Get(ctx, "gaallavaultbvtd2msi", "gaallaRG", "gaallatestpe2.5704c932-249a-490b-a142-1396838cd3b", nil)
 	if err != nil {
 		log.Fatalf("failed to finish the request: %v", err)
 	}
@@ -41,31 +41,35 @@ func ExamplePrivateEndpointConnectionClient_Get() {
 	// 	Type: to.Ptr("Microsoft.RecoveryServices/vaults/privateEndpointConnections"),
 	// 	ID: to.Ptr("/subscriptions/04cf684a-d41f-4550-9f70-7708a3a2283b/resourceGroups/gaallaRG/providers/Microsoft.RecoveryServicesBVTD2/vaults/gaallavaultbvtd2msi/privateEndpointConnections/gaallatestpe3.3592346090307038890.backup.5704c932-249a-490b-a142-1396838cd3b"),
 	// 	Properties: &armrecoveryservicesbackup.PrivateEndpointConnection{
-	// 		PrivateEndpoint: &armrecoveryservicesbackup.PrivateEndpoint{
-	// 			ID: to.Ptr("/subscriptions/04cf684a-d41f-4550-9f70-7708a3a2283b/resourceGroups/gaallaRG/providers/Microsoft.Network/privateEndpoints/gaallatestpe3"),
+	// 		GroupIDs: []*armrecoveryservicesbackup.VaultSubResourceType{
+	// 			to.Ptr(armrecoveryservicesbackup.VaultSubResourceTypeAzureBackupSecondary)},
+	// 			PrivateEndpoint: &armrecoveryservicesbackup.PrivateEndpoint{
+	// 				ID: to.Ptr("/subscriptions/04cf684a-d41f-4550-9f70-7708a3a2283b/resourceGroups/gaallaRG/providers/Microsoft.Network/privateEndpoints/gaallatestpe3"),
+	// 			},
+	// 			PrivateLinkServiceConnectionState: &armrecoveryservicesbackup.PrivateLinkServiceConnectionState{
+	// 				Description: to.Ptr("Approved by johndoe@company.com"),
+	// 				Status: to.Ptr(armrecoveryservicesbackup.PrivateEndpointConnectionStatusApproved),
+	// 			},
+	// 			ProvisioningState: to.Ptr(armrecoveryservicesbackup.ProvisioningStateSucceeded),
 	// 		},
-	// 		PrivateLinkServiceConnectionState: &armrecoveryservicesbackup.PrivateLinkServiceConnectionState{
-	// 			Description: to.Ptr("Approved by johndoe@company.com"),
-	// 			Status: to.Ptr(armrecoveryservicesbackup.PrivateEndpointConnectionStatusApproved),
-	// 		},
-	// 		ProvisioningState: to.Ptr(armrecoveryservicesbackup.ProvisioningStateSucceeded),
-	// 	},
-	// }
+	// 	}
 }
 
-// Generated from example definition: https://github.com/Azure/azure-rest-api-specs/blob/3751704f5318f1175875c94b66af769db917f2d3/specification/recoveryservicesbackup/resource-manager/Microsoft.RecoveryServices/stable/2023-01-01/examples/PrivateEndpointConnection/PutPrivateEndpointConnection.json
+// Generated from example definition: https://github.com/Azure/azure-rest-api-specs/blob/a4ddec441435d1ef766c4f160eda658a69cc5dc2/specification/recoveryservicesbackup/resource-manager/Microsoft.RecoveryServices/stable/2023-04-01/examples/PrivateEndpointConnection/PutPrivateEndpointConnection.json
 func ExamplePrivateEndpointConnectionClient_BeginPut() {
 	cred, err := azidentity.NewDefaultAzureCredential(nil)
 	if err != nil {
 		log.Fatalf("failed to obtain a credential: %v", err)
 	}
 	ctx := context.Background()
-	client, err := armrecoveryservicesbackup.NewPrivateEndpointConnectionClient("04cf684a-d41f-4550-9f70-7708a3a2283b", cred, nil)
+	clientFactory, err := armrecoveryservicesbackup.NewClientFactory("<subscription-id>", cred, nil)
 	if err != nil {
 		log.Fatalf("failed to create client: %v", err)
 	}
-	poller, err := client.BeginPut(ctx, "gaallavaultbvtd2msi", "gaallaRG", "gaallatestpe2.5704c932-249a-490b-a142-1396838cd3b", armrecoveryservicesbackup.PrivateEndpointConnectionResource{
+	poller, err := clientFactory.NewPrivateEndpointConnectionClient().BeginPut(ctx, "gaallavaultbvtd2msi", "gaallaRG", "gaallatestpe2.5704c932-249a-490b-a142-1396838cd3b", armrecoveryservicesbackup.PrivateEndpointConnectionResource{
 		Properties: &armrecoveryservicesbackup.PrivateEndpointConnection{
+			GroupIDs: []*armrecoveryservicesbackup.VaultSubResourceType{
+				to.Ptr(armrecoveryservicesbackup.VaultSubResourceTypeAzureBackupSecondary)},
 			PrivateEndpoint: &armrecoveryservicesbackup.PrivateEndpoint{
 				ID: to.Ptr("/subscriptions/04cf684a-d41f-4550-9f70-7708a3a2283b/resourceGroups/gaallaRG/providers/Microsoft.Network/privateEndpoints/gaallatestpe3"),
 			},
@@ -91,30 +95,32 @@ func ExamplePrivateEndpointConnectionClient_BeginPut() {
 	// 	Type: to.Ptr("Microsoft.RecoveryServices/vaults/privateEndpointConnections"),
 	// 	ID: to.Ptr("/subscriptions/04cf684a-d41f-4550-9f70-7708a3a2283b/resourceGroups/gaallaRG/providers/Microsoft.RecoveryServicesBVTD2/vaults/gaallavaultbvtd2msi/privateEndpointConnections/gaallatestpe3.3592346090307038890.backup.5704c932-249a-490b-a142-1396838cd3b"),
 	// 	Properties: &armrecoveryservicesbackup.PrivateEndpointConnection{
-	// 		PrivateEndpoint: &armrecoveryservicesbackup.PrivateEndpoint{
-	// 			ID: to.Ptr("/subscriptions/04cf684a-d41f-4550-9f70-7708a3a2283b/resourceGroups/gaallaRG/providers/Microsoft.Network/privateEndpoints/gaallatestpe3"),
+	// 		GroupIDs: []*armrecoveryservicesbackup.VaultSubResourceType{
+	// 			to.Ptr(armrecoveryservicesbackup.VaultSubResourceTypeAzureBackupSecondary)},
+	// 			PrivateEndpoint: &armrecoveryservicesbackup.PrivateEndpoint{
+	// 				ID: to.Ptr("/subscriptions/04cf684a-d41f-4550-9f70-7708a3a2283b/resourceGroups/gaallaRG/providers/Microsoft.Network/privateEndpoints/gaallatestpe3"),
+	// 			},
+	// 			PrivateLinkServiceConnectionState: &armrecoveryservicesbackup.PrivateLinkServiceConnectionState{
+	// 				Description: to.Ptr("Approved by johndoe@company.com"),
+	// 				Status: to.Ptr(armrecoveryservicesbackup.PrivateEndpointConnectionStatusApproved),
+	// 			},
+	// 			ProvisioningState: to.Ptr(armrecoveryservicesbackup.ProvisioningStateSucceeded),
 	// 		},
-	// 		PrivateLinkServiceConnectionState: &armrecoveryservicesbackup.PrivateLinkServiceConnectionState{
-	// 			Description: to.Ptr("Approved by johndoe@company.com"),
-	// 			Status: to.Ptr(armrecoveryservicesbackup.PrivateEndpointConnectionStatusApproved),
-	// 		},
-	// 		ProvisioningState: to.Ptr(armrecoveryservicesbackup.ProvisioningStateSucceeded),
-	// 	},
-	// }
+	// 	}
 }
 
-// Generated from example definition: https://github.com/Azure/azure-rest-api-specs/blob/3751704f5318f1175875c94b66af769db917f2d3/specification/recoveryservicesbackup/resource-manager/Microsoft.RecoveryServices/stable/2023-01-01/examples/PrivateEndpointConnection/DeletePrivateEndpointConnection.json
+// Generated from example definition: https://github.com/Azure/azure-rest-api-specs/blob/a4ddec441435d1ef766c4f160eda658a69cc5dc2/specification/recoveryservicesbackup/resource-manager/Microsoft.RecoveryServices/stable/2023-04-01/examples/PrivateEndpointConnection/DeletePrivateEndpointConnection.json
 func ExamplePrivateEndpointConnectionClient_BeginDelete() {
 	cred, err := azidentity.NewDefaultAzureCredential(nil)
 	if err != nil {
 		log.Fatalf("failed to obtain a credential: %v", err)
 	}
 	ctx := context.Background()
-	client, err := armrecoveryservicesbackup.NewPrivateEndpointConnectionClient("04cf684a-d41f-4550-9f70-7708a3a2283b", cred, nil)
+	clientFactory, err := armrecoveryservicesbackup.NewClientFactory("<subscription-id>", cred, nil)
 	if err != nil {
 		log.Fatalf("failed to create client: %v", err)
 	}
-	poller, err := client.BeginDelete(ctx, "gaallavaultbvtd2msi", "gaallaRG", "gaallatestpe2.5704c932-249a-490b-a142-1396838cd3b", nil)
+	poller, err := clientFactory.NewPrivateEndpointConnectionClient().BeginDelete(ctx, "gaallavaultbvtd2msi", "gaallaRG", "gaallatestpe2.5704c932-249a-490b-a142-1396838cd3b", nil)
 	if err != nil {
 		log.Fatalf("failed to finish the request: %v", err)
 	}

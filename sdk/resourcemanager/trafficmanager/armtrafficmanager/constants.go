@@ -11,7 +11,7 @@ package armtrafficmanager
 
 const (
 	moduleName    = "armtrafficmanager"
-	moduleVersion = "v1.1.0-beta.1"
+	moduleVersion = "v1.2.0"
 )
 
 // AllowedEndpointRecordType - The allowed type DNS record types for this profile.
@@ -61,6 +61,7 @@ const (
 	EndpointMonitorStatusInactive         EndpointMonitorStatus = "Inactive"
 	EndpointMonitorStatusOnline           EndpointMonitorStatus = "Online"
 	EndpointMonitorStatusStopped          EndpointMonitorStatus = "Stopped"
+	EndpointMonitorStatusUnmonitored      EndpointMonitorStatus = "Unmonitored"
 )
 
 // PossibleEndpointMonitorStatusValues returns the possible values for the EndpointMonitorStatus const type.
@@ -72,6 +73,7 @@ func PossibleEndpointMonitorStatusValues() []EndpointMonitorStatus {
 		EndpointMonitorStatusInactive,
 		EndpointMonitorStatusOnline,
 		EndpointMonitorStatusStopped,
+		EndpointMonitorStatusUnmonitored,
 	}
 }
 

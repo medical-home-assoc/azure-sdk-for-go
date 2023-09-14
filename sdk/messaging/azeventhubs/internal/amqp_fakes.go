@@ -7,7 +7,7 @@ import (
 	"context"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azeventhubs/internal/amqpwrap"
-	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azeventhubs/internal/go-amqp"
+	"github.com/Azure/go-amqp"
 )
 
 type FakeNSForPartClient struct {
@@ -34,14 +34,14 @@ type FakeAMQPReceiver struct {
 	amqpwrap.AMQPReceiverCloser
 
 	// ActiveCredits are incremented and decremented by IssueCredit and Receive.
-	ActiveCredits uint32
+	ActiveCredits int32
 
 	// IssuedCredit just accumulates, so we can get an idea of how many credits we issued overall.
 	IssuedCredit []uint32
 
 	// CreditsSetFromOptions is similar to issuedCredit, but only tracks credits added in via the LinkOptions.Credit
 	// field (ie, enabling prefetch).
-	CreditsSetFromOptions uint32
+	CreditsSetFromOptions int32
 
 	// ManualCreditsSetFromOptions is the value of the LinkOptions.ManualCredits value.
 	ManualCreditsSetFromOptions bool
@@ -69,19 +69,19 @@ func (ns *FakeNSForPartClient) NewAMQPSession(ctx context.Context) (amqpwrap.AMQ
 	}, 1, nil
 }
 
-func (sess *FakeAMQPSession) NewReceiver(ctx context.Context, source string, opts *amqp.ReceiverOptions) (amqpwrap.AMQPReceiverCloser, error) {
+func (sess *FakeAMQPSession) NewReceiver(ctx context.Context, source string, partitionID string, opts *amqp.ReceiverOptions) (amqpwrap.AMQPReceiverCloser, error) {
 	sess.NS.NewReceiverCalled++
-	sess.NS.Receiver.ManualCreditsSetFromOptions = opts.ManualCredits
+	sess.NS.Receiver.ManualCreditsSetFromOptions = opts.Credit == -1
 	sess.NS.Receiver.CreditsSetFromOptions = opts.Credit
 
-	if !opts.ManualCredits {
+	if opts.Credit > 0 {
 		sess.NS.Receiver.ActiveCredits = opts.Credit
 	}
 
 	return sess.NS.Receiver, sess.NS.NewReceiverErr
 }
 
-func (sess *FakeAMQPSession) NewSender(ctx context.Context, target string, opts *amqp.SenderOptions) (AMQPSenderCloser, error) {
+func (sess *FakeAMQPSession) NewSender(ctx context.Context, target string, partitionID string, opts *amqp.SenderOptions) (AMQPSenderCloser, error) {
 	sess.NS.NewSenderCalled++
 	return sess.NS.Sender, sess.NS.NewSenderErr
 }
@@ -92,11 +92,11 @@ func (sess *FakeAMQPSession) Close(ctx context.Context) error {
 }
 
 func (r *FakeAMQPReceiver) Credits() uint32 {
-	return r.ActiveCredits
+	return uint32(r.ActiveCredits)
 }
 
 func (r *FakeAMQPReceiver) IssueCredit(credit uint32) error {
-	r.ActiveCredits += credit
+	r.ActiveCredits += int32(credit)
 	r.IssuedCredit = append(r.IssuedCredit, credit)
 	return nil
 }
@@ -105,15 +105,16 @@ func (r *FakeAMQPReceiver) LinkName() string {
 	return r.NameForLink
 }
 
-func (r *FakeAMQPReceiver) Receive(ctx context.Context) (*amqp.Message, error) {
+func (r *FakeAMQPReceiver) Receive(ctx context.Context, o *amqp.ReceiveOptions) (*amqp.Message, error) {
 	if len(r.Messages) > 0 {
 		r.ActiveCredits--
 		m := r.Messages[0]
 		r.Messages = r.Messages[1:]
 		return m, nil
+	} else {
+		<-ctx.Done()
+		return nil, ctx.Err()
 	}
-
-	return nil, nil
 }
 
 func (r *FakeAMQPReceiver) Close(ctx context.Context) error {

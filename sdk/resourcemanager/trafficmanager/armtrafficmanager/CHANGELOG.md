@@ -1,13 +1,18 @@
 # Release History
 
-## 1.1.0-beta.1 (2022-10-31)
+## 1.2.0 (2023-06-23)
 ### Features Added
 
-- New const `AlwaysServeDisabled`
-- New const `AlwaysServeEnabled`
-- New type alias `AlwaysServe`
-- New function `PossibleAlwaysServeValues() []AlwaysServe`
+- New value `EndpointMonitorStatusUnmonitored` added to enum type `EndpointMonitorStatus`
+- New enum type `AlwaysServe` with values `AlwaysServeDisabled`, `AlwaysServeEnabled`
+- New function `*ProfilesClient.CheckTrafficManagerNameAvailabilityV2(context.Context, CheckTrafficManagerRelativeDNSNameAvailabilityParameters, *ProfilesClientCheckTrafficManagerNameAvailabilityV2Options) (ProfilesClientCheckTrafficManagerNameAvailabilityV2Response, error)`
 - New field `AlwaysServe` in struct `EndpointProperties`
+
+
+## 1.1.0 (2023-04-07)
+### Features Added
+
+- New struct `ClientFactory` which is a client factory used to create any client in this module
 
 
 ## 1.0.0 (2022-05-17)

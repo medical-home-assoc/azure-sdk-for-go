@@ -11,7 +11,7 @@ package armcosmos
 
 const (
 	moduleName    = "armcosmos"
-	moduleVersion = "v2.2.0-beta.1"
+	moduleVersion = "v3.0.0-beta.1"
 )
 
 // APIType - Enum to indicate the API type of the restorable database account.
@@ -56,7 +56,7 @@ func PossibleAnalyticalStorageSchemaTypeValues() []AnalyticalStorageSchemaType {
 
 // AuthenticationMethod - Which authentication method Cassandra should use to authenticate clients. 'None' turns off authentication,
 // so should not be used except in emergencies. 'Cassandra' is the default password based
-// authentication. The default is 'Cassandra'. 'Ldap' is in preview.
+// authentication. The default is 'Cassandra'.
 type AuthenticationMethod string
 
 const (
@@ -125,6 +125,22 @@ func PossibleBackupStorageRedundancyValues() []BackupStorageRedundancy {
 		BackupStorageRedundancyGeo,
 		BackupStorageRedundancyLocal,
 		BackupStorageRedundancyZone,
+	}
+}
+
+// CheckNameAvailabilityReason - The reason why the given name is not available.
+type CheckNameAvailabilityReason string
+
+const (
+	CheckNameAvailabilityReasonAlreadyExists CheckNameAvailabilityReason = "AlreadyExists"
+	CheckNameAvailabilityReasonInvalid       CheckNameAvailabilityReason = "Invalid"
+)
+
+// PossibleCheckNameAvailabilityReasonValues returns the possible values for the CheckNameAvailabilityReason const type.
+func PossibleCheckNameAvailabilityReasonValues() []CheckNameAvailabilityReason {
+	return []CheckNameAvailabilityReason{
+		CheckNameAvailabilityReasonAlreadyExists,
+		CheckNameAvailabilityReasonInvalid,
 	}
 }
 
@@ -218,14 +234,16 @@ func PossibleContinuousTierValues() []ContinuousTier {
 type CreateMode string
 
 const (
-	CreateModeDefault CreateMode = "Default"
-	CreateModeRestore CreateMode = "Restore"
+	CreateModeDefault            CreateMode = "Default"
+	CreateModePointInTimeRestore CreateMode = "PointInTimeRestore"
+	CreateModeRestore            CreateMode = "Restore"
 )
 
 // PossibleCreateModeValues returns the possible values for the CreateMode const type.
 func PossibleCreateModeValues() []CreateMode {
 	return []CreateMode{
 		CreateModeDefault,
+		CreateModePointInTimeRestore,
 		CreateModeRestore,
 	}
 }
@@ -255,6 +273,7 @@ type DataTransferComponent string
 const (
 	DataTransferComponentAzureBlobStorage  DataTransferComponent = "AzureBlobStorage"
 	DataTransferComponentCosmosDBCassandra DataTransferComponent = "CosmosDBCassandra"
+	DataTransferComponentCosmosDBMongo     DataTransferComponent = "CosmosDBMongo"
 	DataTransferComponentCosmosDBSQL       DataTransferComponent = "CosmosDBSql"
 )
 
@@ -263,6 +282,7 @@ func PossibleDataTransferComponentValues() []DataTransferComponent {
 	return []DataTransferComponent{
 		DataTransferComponentAzureBlobStorage,
 		DataTransferComponentCosmosDBCassandra,
+		DataTransferComponentCosmosDBMongo,
 		DataTransferComponentCosmosDBSQL,
 	}
 }
@@ -405,6 +425,26 @@ func PossibleKeyKindValues() []KeyKind {
 	}
 }
 
+// Kind - Kind of the connection string key
+type Kind string
+
+const (
+	KindPrimary           Kind = "Primary"
+	KindPrimaryReadonly   Kind = "PrimaryReadonly"
+	KindSecondary         Kind = "Secondary"
+	KindSecondaryReadonly Kind = "SecondaryReadonly"
+)
+
+// PossibleKindValues returns the possible values for the Kind const type.
+func PossibleKindValues() []Kind {
+	return []Kind{
+		KindPrimary,
+		KindPrimaryReadonly,
+		KindSecondary,
+		KindSecondaryReadonly,
+	}
+}
+
 // ManagedCassandraProvisioningState - The status of the resource at the time the operation was called.
 type ManagedCassandraProvisioningState string
 
@@ -445,6 +485,51 @@ func PossibleManagedCassandraResourceIdentityTypeValues() []ManagedCassandraReso
 	}
 }
 
+// MinimalTLSVersion - Indicates the minimum allowed Tls version. The default is Tls 1.0, except for Cassandra and Mongo API's,
+// which only work with Tls 1.2.
+type MinimalTLSVersion string
+
+const (
+	MinimalTLSVersionTLS   MinimalTLSVersion = "Tls"
+	MinimalTLSVersionTls11 MinimalTLSVersion = "Tls11"
+	MinimalTLSVersionTls12 MinimalTLSVersion = "Tls12"
+)
+
+// PossibleMinimalTLSVersionValues returns the possible values for the MinimalTLSVersion const type.
+func PossibleMinimalTLSVersionValues() []MinimalTLSVersion {
+	return []MinimalTLSVersion{
+		MinimalTLSVersionTLS,
+		MinimalTLSVersionTls11,
+		MinimalTLSVersionTls12,
+	}
+}
+
+// MongoClusterStatus - The status of the resource at the time the operation was called.
+type MongoClusterStatus string
+
+const (
+	MongoClusterStatusDropping     MongoClusterStatus = "Dropping"
+	MongoClusterStatusProvisioning MongoClusterStatus = "Provisioning"
+	MongoClusterStatusReady        MongoClusterStatus = "Ready"
+	MongoClusterStatusStarting     MongoClusterStatus = "Starting"
+	MongoClusterStatusStopped      MongoClusterStatus = "Stopped"
+	MongoClusterStatusStopping     MongoClusterStatus = "Stopping"
+	MongoClusterStatusUpdating     MongoClusterStatus = "Updating"
+)
+
+// PossibleMongoClusterStatusValues returns the possible values for the MongoClusterStatus const type.
+func PossibleMongoClusterStatusValues() []MongoClusterStatus {
+	return []MongoClusterStatus{
+		MongoClusterStatusDropping,
+		MongoClusterStatusProvisioning,
+		MongoClusterStatusReady,
+		MongoClusterStatusStarting,
+		MongoClusterStatusStopped,
+		MongoClusterStatusStopping,
+		MongoClusterStatusUpdating,
+	}
+}
+
 // MongoRoleDefinitionType - Indicates whether the Role Definition was built-in or user created.
 type MongoRoleDefinitionType string
 
@@ -474,6 +559,20 @@ func PossibleNetworkACLBypassValues() []NetworkACLBypass {
 	return []NetworkACLBypass{
 		NetworkACLBypassNone,
 		NetworkACLBypassAzureServices,
+	}
+}
+
+// NodeKind - The kind of a node in the mongo cluster.
+type NodeKind string
+
+const (
+	NodeKindShard NodeKind = "Shard"
+)
+
+// PossibleNodeKindValues returns the possible values for the NodeKind const type.
+func PossibleNodeKindValues() []NodeKind {
+	return []NodeKind{
+		NodeKindShard,
 	}
 }
 
@@ -590,6 +689,30 @@ func PossiblePrimaryAggregationTypeValues() []PrimaryAggregationType {
 		PrimaryAggregationTypeMinimum,
 		PrimaryAggregationTypeNone,
 		PrimaryAggregationTypeTotal,
+	}
+}
+
+// ProvisioningState - The provisioning state of the resource.
+type ProvisioningState string
+
+const (
+	ProvisioningStateCanceled   ProvisioningState = "Canceled"
+	ProvisioningStateDropping   ProvisioningState = "Dropping"
+	ProvisioningStateFailed     ProvisioningState = "Failed"
+	ProvisioningStateInProgress ProvisioningState = "InProgress"
+	ProvisioningStateSucceeded  ProvisioningState = "Succeeded"
+	ProvisioningStateUpdating   ProvisioningState = "Updating"
+)
+
+// PossibleProvisioningStateValues returns the possible values for the ProvisioningState const type.
+func PossibleProvisioningStateValues() []ProvisioningState {
+	return []ProvisioningState{
+		ProvisioningStateCanceled,
+		ProvisioningStateDropping,
+		ProvisioningStateFailed,
+		ProvisioningStateInProgress,
+		ProvisioningStateSucceeded,
+		ProvisioningStateUpdating,
 	}
 }
 
@@ -763,6 +886,28 @@ func PossibleSpatialTypeValues() []SpatialType {
 	}
 }
 
+// Status - Enum to indicate current buildout status of the region.
+type Status string
+
+const (
+	StatusDeleting        Status = "Deleting"
+	StatusInitializing    Status = "Initializing"
+	StatusInternallyReady Status = "InternallyReady"
+	StatusOnline          Status = "Online"
+	StatusUninitialized   Status = "Uninitialized"
+)
+
+// PossibleStatusValues returns the possible values for the Status const type.
+func PossibleStatusValues() []Status {
+	return []Status{
+		StatusDeleting,
+		StatusInitializing,
+		StatusInternallyReady,
+		StatusOnline,
+		StatusUninitialized,
+	}
+}
+
 // ThroughputPolicyType - ThroughputPolicy to apply for throughput redistribution
 type ThroughputPolicyType string
 
@@ -816,6 +961,36 @@ func PossibleTriggerTypeValues() []TriggerType {
 	return []TriggerType{
 		TriggerTypePost,
 		TriggerTypePre,
+	}
+}
+
+// Type - Type of the connection string
+type Type string
+
+const (
+	TypeCassandra                  Type = "Cassandra"
+	TypeCassandraConnectorMetadata Type = "CassandraConnectorMetadata"
+	TypeGremlin                    Type = "Gremlin"
+	TypeGremlinV2                  Type = "GremlinV2"
+	TypeMongoDB                    Type = "MongoDB"
+	TypeSQL                        Type = "Sql"
+	TypeSQLDedicatedGateway        Type = "SqlDedicatedGateway"
+	TypeTable                      Type = "Table"
+	TypeUndefined                  Type = "Undefined"
+)
+
+// PossibleTypeValues returns the possible values for the Type const type.
+func PossibleTypeValues() []Type {
+	return []Type{
+		TypeCassandra,
+		TypeCassandraConnectorMetadata,
+		TypeGremlin,
+		TypeGremlinV2,
+		TypeMongoDB,
+		TypeSQL,
+		TypeSQLDedicatedGateway,
+		TypeTable,
+		TypeUndefined,
 	}
 }
 
